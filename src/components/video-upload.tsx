@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Upload, X, CheckCircle2, AlertCircle, Film } from "lucide-react";
+import {
+  Upload,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  Film,
+  TriangleAlert,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +25,14 @@ import { createVideo } from "@/app/(admin)/uploads/actions";
 import { seekAndCapture, uploadThumbnail } from "@/lib/thumbnail";
 
 type UploadState = "idle" | "uploading" | "thumbnail" | "saving" | "done" | "error";
+
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 Mo
+const WARN_FILE_SIZE = 200 * 1024 * 1024; // 200 Mo
+const ACCEPTED_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
+
+function formatMo(bytes: number) {
+  return (bytes / (1024 * 1024)).toFixed(1) + " Mo";
+}
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 o";
@@ -40,23 +55,56 @@ export function VideoUpload({
   const [state, setState] = useState<UploadState>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [sizeWarning, setSizeWarning] = useState<string | null>(null);
+  const [sizeBlocked, setSizeBlocked] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<XMLHttpRequest | null>(null);
 
   const selectedTalent = talents.find((t) => t.id === talentId);
+
+  function clearFile() {
+    setFile(null);
+    setSizeWarning(null);
+    setSizeBlocked(false);
+    setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const selected = e.target.files?.[0];
       if (!selected) return;
 
-      if (!selected.type.startsWith("video/")) {
-        setError("Veuillez selectionner un fichier video.");
+      // Reset
+      setSizeWarning(null);
+      setSizeBlocked(false);
+      setError(null);
+
+      // Format check
+      if (!ACCEPTED_TYPES.includes(selected.type)) {
+        setError("Format non supporte. Utilise MP4, MOV ou WebM.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
 
+      // Size check
+      if (selected.size > MAX_FILE_SIZE) {
+        setError(
+          `Fichier trop lourd (${formatMo(selected.size)}). Limite : 500 Mo. Compresse la video avant d'uploader (Handbrake, 1080p, H.264, 8-12 Mbps).`
+        );
+        setSizeBlocked(true);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
+      // Size warning
+      if (selected.size > WARN_FILE_SIZE) {
+        setSizeWarning(
+          `Fichier volumineux (${formatMo(selected.size)}). Pour un chargement plus rapide, compresse en 1080p H.264.`
+        );
+      }
+
       setFile(selected);
-      setError(null);
 
       if (!title) {
         const name = selected.name.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");
@@ -67,7 +115,7 @@ export function VideoUpload({
   );
 
   async function handleUpload() {
-    if (!file || !talentId || !title || !selectedTalent) return;
+    if (!file || !talentId || !title || !selectedTalent || sizeBlocked) return;
 
     setError(null);
     setState("uploading");
@@ -166,6 +214,8 @@ export function VideoUpload({
     setProgress(0);
     setState("idle");
     setError(null);
+    setSizeWarning(null);
+    setSizeBlocked(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -215,7 +265,7 @@ export function VideoUpload({
           >
             <Upload className="size-8" />
             <span>Cliquer pour selectionner un fichier</span>
-            <span className="text-xs">MP4, MOV, WebM</span>
+            <span className="text-xs">MP4, MOV, WebM - max 500 Mo</span>
           </button>
         ) : (
           <div className="flex items-center gap-3 rounded-lg border p-3">
@@ -227,14 +277,7 @@ export function VideoUpload({
               </p>
             </div>
             {state === "idle" && (
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => {
-                  setFile(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-              >
+              <Button variant="ghost" size="icon-xs" onClick={clearFile}>
                 <X />
               </Button>
             )}
@@ -243,11 +286,19 @@ export function VideoUpload({
         <input
           ref={fileInputRef}
           type="file"
-          accept="video/*"
+          accept="video/mp4,video/quicktime,video/webm"
           className="hidden"
           onChange={handleFileChange}
         />
       </div>
+
+      {/* Size warning */}
+      {sizeWarning && !error && (
+        <div className="flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950 dark:text-yellow-200">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          {sizeWarning}
+        </div>
+      )}
 
       {/* Progress */}
       {isBusy && (
@@ -278,8 +329,8 @@ export function VideoUpload({
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
-          <AlertCircle className="size-4 shrink-0" />
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
           {error}
         </div>
       )}
@@ -291,7 +342,7 @@ export function VideoUpload({
         ) : (
           <Button
             onClick={handleUpload}
-            disabled={!file || !talentId || !title || isBusy}
+            disabled={!file || !talentId || !title || isBusy || sizeBlocked}
           >
             {isBusy ? "Upload en cours..." : "Uploader"}
           </Button>
