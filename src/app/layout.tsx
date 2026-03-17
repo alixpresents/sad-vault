@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Sad Vault",
-    template: "%s - Sad Vault",
+    default: "Reel - Sad Pictures",
+    template: "%s - Reel - Sad Pictures",
   },
   description: "Plateforme de gestion de reels et videos pour talents",
   robots: { index: false, follow: false },

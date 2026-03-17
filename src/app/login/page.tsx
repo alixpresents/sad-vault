@@ -29,8 +29,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-white">
       <div className="w-full max-w-xs px-6">
         <div className="mb-8 text-center">
-          <h1 className="text-[14px] font-semibold tracking-tight text-neutral-900">
-            Sad Vault
+          <h1 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-900">
+            REEL.SAD-PICTURES.COM
           </h1>
           <p className="mt-1 text-[13px] text-neutral-400">Connectez-vous pour continuer</p>
         </div>

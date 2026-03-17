@@ -47,7 +47,7 @@ export function AdminSidebar() {
       <SidebarHeader className="border-b border-border px-4 py-4">
         <Link href="/dashboard" className="flex items-center gap-2">
           <span className="text-lg font-semibold tracking-tight">
-            Sad Vault
+            REEL.SAD-PICTURES.COM
           </span>
         </Link>
       </SidebarHeader>

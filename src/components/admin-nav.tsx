@@ -51,9 +51,9 @@ export function AdminNav() {
       {/* Logo */}
       <Link
         href="/dashboard"
-        className="text-[14px] font-semibold tracking-tight text-neutral-900"
+        className="text-[11px] font-semibold uppercase tracking-wide text-neutral-900"
       >
-        Sad Vault
+        REEL.SAD-PICTURES.COM
       </Link>
 
       {/* Pill nav - centered */}
