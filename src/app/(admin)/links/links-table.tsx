@@ -5,13 +5,15 @@ import Link from "next/link";
 import { Copy, Check, Trash2, ExternalLink, Pencil } from "lucide-react";
 import type { ShareLink } from "@/lib/types";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { deleteShareLink } from "./actions";
+import { deleteShareLink, toggleShareLinkActive } from "./actions";
 
-function getLinkStatus(expiresAt: string | null) {
-  if (!expiresAt) return "active" as const;
-  const exp = new Date(expiresAt);
-  if (exp <= new Date()) return "expired" as const;
-  if ((exp.getTime() - Date.now()) / 86400000 <= 7) return "expiring" as const;
+function getLinkStatus(link: ShareLink) {
+  if (!link.is_active) return "inactive" as const;
+  if (link.expires_at) {
+    const exp = new Date(link.expires_at);
+    if (exp <= new Date()) return "expired" as const;
+    if ((exp.getTime() - Date.now()) / 86400000 <= 7) return "expiring" as const;
+  }
   return "active" as const;
 }
 
@@ -31,12 +33,14 @@ const statusConfig = {
   active: { borderColor: "border-t-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-400", label: "Actif" },
   expiring: { borderColor: "border-t-amber-400", badge: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-400", label: "" },
   expired: { borderColor: "border-t-neutral-300", badge: "bg-neutral-100 text-neutral-500 border-neutral-200", dot: "bg-neutral-400", label: "Expire" },
+  inactive: { borderColor: "border-t-neutral-200", badge: "bg-neutral-100 text-neutral-400 border-neutral-200", dot: "bg-neutral-300", label: "Inactif" },
 };
 
 export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap: Map<string, string> }) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -52,6 +56,12 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
     setTimeout(() => setCopiedId(null), 2000);
   }
 
+  async function handleToggle(id: string) {
+    setTogglingId(id);
+    await toggleShareLinkActive(id);
+    setTogglingId(null);
+  }
+
   if (links.length === 0) {
     return (
       <div className="flex flex-col items-center rounded-lg border border-dashed border-neutral-200 py-14 text-center">
@@ -64,7 +74,7 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
     <>
       <div className="grid grid-cols-2 gap-3">
         {links.map((link) => {
-          const status = getLinkStatus(link.expires_at);
+          const status = getLinkStatus(link);
           const cfg = statusConfig[status];
           let badgeLabel = cfg.label;
           if (status === "expiring" && link.expires_at) {
@@ -72,11 +82,12 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
             badgeLabel = `Expire ${days}j`;
           }
           const videoCount = Array.isArray(link.video_ids) ? link.video_ids.length : 0;
+          const isInactive = status === "inactive";
 
           return (
             <div
               key={link.id}
-              className={`group relative rounded-lg border border-neutral-200 border-t-2 ${cfg.borderColor} bg-white p-4 shadow-sm transition-all hover:shadow-md`}
+              className={`group relative rounded-lg border border-neutral-200 border-t-2 ${cfg.borderColor} bg-white p-4 shadow-sm transition-all hover:shadow-md ${isInactive ? "opacity-60" : ""}`}
             >
               <Link href={`/links/${link.id}/edit`} className="absolute inset-0 rounded-lg" />
               <div className="relative">
@@ -84,10 +95,17 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
                   <span className="truncate text-[13px] font-semibold text-neutral-900">
                     {link.title || "Sans titre"}
                   </span>
-                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium ${cfg.badge}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggle(link.id); }}
+                    disabled={togglingId === link.id}
+                    className={`relative z-10 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all ${cfg.badge} ${
+                      status === "expired" ? "cursor-default" : "cursor-pointer hover:opacity-80"
+                    } ${togglingId === link.id ? "opacity-50" : ""}`}
+                    title={status === "expired" ? "Lien expire" : isInactive ? "Cliquer pour reactiver" : "Cliquer pour desactiver"}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full transition-colors ${cfg.dot}`} />
                     {badgeLabel}
-                  </span>
+                  </button>
                 </div>
                 {link.talent_id && talentMap.get(link.talent_id) && (
                   <p className="mb-1.5 text-[12px] text-neutral-500">{talentMap.get(link.talent_id)}</p>
@@ -99,7 +117,7 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
                 </div>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={(e) => { e.stopPropagation(); copyLink(link.token, link.id); }}
+                    onClick={(e) => { e.stopPropagation(); copyLink(link.custom_slug || link.token, link.id); }}
                     className="relative z-10 rounded-md border border-neutral-200 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-50 hover:text-neutral-600"
                     title="Copier le lien"
                   >
@@ -114,7 +132,7 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
                     <Pencil className="h-3.5 w-3.5" />
                   </Link>
                   <a
-                    href={`/s/${link.token}`}
+                    href={`/s/${link.custom_slug || link.token}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}

@@ -24,11 +24,13 @@ function getRelativeTime(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-function getLinkStatus(expiresAt: string | null) {
-  if (!expiresAt) return "active" as const;
-  const exp = new Date(expiresAt);
-  if (exp <= new Date()) return "expired" as const;
-  if ((exp.getTime() - Date.now()) / 86400000 <= 7) return "expiring" as const;
+function getLinkStatus(expiresAt: string | null, isActive?: boolean) {
+  if (isActive === false) return "inactive" as const;
+  if (expiresAt) {
+    const exp = new Date(expiresAt);
+    if (exp <= new Date()) return "expired" as const;
+    if ((exp.getTime() - Date.now()) / 86400000 <= 7) return "expiring" as const;
+  }
   return "active" as const;
 }
 
@@ -41,6 +43,7 @@ const statusConfig = {
   active: { borderColor: "border-t-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-400", label: "Actif" },
   expiring: { borderColor: "border-t-amber-400", badge: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-400", label: "" },
   expired: { borderColor: "border-t-neutral-300", badge: "bg-neutral-100 text-neutral-500 border-neutral-200", dot: "bg-neutral-400", label: "Expire" },
+  inactive: { borderColor: "border-t-neutral-200", badge: "bg-neutral-100 text-neutral-400 border-neutral-200", dot: "bg-neutral-300", label: "Inactif" },
 };
 
 export default async function DashboardPage() {
@@ -63,19 +66,19 @@ export default async function DashboardPage() {
     supabase.from("share_links").select("*", { count: "exact", head: true }),
     supabase
       .from("share_links")
-      .select("id, token, title, talent_id, video_ids, view_count, created_at, expires_at, talents(name)")
+      .select("id, token, title, talent_id, video_ids, view_count, created_at, expires_at, is_active, talents(name)")
       .order("created_at", { ascending: false })
       .limit(6),
     supabase.from("talents").select("id, name, slug").order("name"),
     supabase.from("videos").select("file_size_bytes"),
     supabase.from("share_links").select("view_count"),
-    supabase.from("share_links").select("id, expires_at"),
+    supabase.from("share_links").select("id, expires_at, is_active"),
   ]);
 
   const totalSize = (totalSizeData || []).reduce((sum: number, v: { file_size_bytes: number | null }) => sum + (v.file_size_bytes || 0), 0);
   const totalViews = (viewSumData || []).reduce((sum: number, l: { view_count: number }) => sum + (l.view_count || 0), 0);
-  const activeLinks = (activeLinksData || []).filter((l: { id: string; expires_at: string | null }) =>
-    !l.expires_at || new Date(l.expires_at) > new Date()
+  const activeLinks = (activeLinksData || []).filter((l: { id: string; expires_at: string | null; is_active: boolean }) =>
+    l.is_active !== false && (!l.expires_at || new Date(l.expires_at) > new Date())
   ).length;
 
   // Counts per talent
@@ -149,9 +152,10 @@ export default async function DashboardPage() {
               view_count: number;
               created_at: string;
               expires_at: string | null;
+              is_active: boolean;
               talents: { name: string }[] | { name: string } | null;
             }) => {
-              const status = getLinkStatus(link.expires_at);
+              const status = getLinkStatus(link.expires_at, link.is_active);
               const cfg = statusConfig[status];
               let badgeLabel = cfg.label;
               if (status === "expiring" && link.expires_at) {
@@ -163,11 +167,13 @@ export default async function DashboardPage() {
                 : null;
               const videoCount = Array.isArray(link.video_ids) ? link.video_ids.length : 0;
 
+              const isInactive = status === "inactive";
+
               return (
                 <Link
                   key={link.id}
                   href={`/links/${link.id}/edit`}
-                  className={`group rounded-lg border border-neutral-200 border-t-2 ${cfg.borderColor} bg-white p-4 shadow-sm transition-all hover:shadow-md`}
+                  className={`group rounded-lg border border-neutral-200 border-t-2 ${cfg.borderColor} bg-white p-4 shadow-sm transition-all hover:shadow-md ${isInactive ? "opacity-60" : ""}`}
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <span className="truncate text-[13px] font-semibold text-neutral-900">

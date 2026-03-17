@@ -148,6 +148,33 @@ export async function deleteShareLink(id: string) {
   revalidatePath("/links");
 }
 
+export async function toggleShareLinkActive(id: string) {
+  const { supabase } = await requireAuth();
+
+  if (!z.string().uuid().safeParse(id).success) {
+    return { error: "ID invalide" };
+  }
+
+  const { data: link } = await supabase
+    .from("share_links")
+    .select("is_active")
+    .eq("id", id)
+    .single();
+
+  if (!link) return { error: "Lien introuvable" };
+
+  const { error } = await supabase
+    .from("share_links")
+    .update({ is_active: !(link as { is_active: boolean }).is_active })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/links");
+  revalidatePath("/dashboard");
+  revalidatePath(`/links/${id}/edit`);
+}
+
 /** Check if a custom_slug is available (for real-time validation) */
 export async function checkSlugAvailability(
   slug: string,

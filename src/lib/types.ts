@@ -27,6 +27,7 @@ export type ShareLink = {
   video_ids: string[];
   expires_at: string | null;
   allow_download: boolean;
+  is_active: boolean;
   view_count: number;
   created_at: string;
   created_by: string | null;

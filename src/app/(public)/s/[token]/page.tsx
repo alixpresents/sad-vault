@@ -107,15 +107,18 @@ export default async function SharePage({
     redirect(`/s/${link.custom_slug}`);
   }
 
-  // Check expiration
-  if (link.expires_at && new Date(link.expires_at) < new Date()) {
+  // Check inactive or expired
+  const isUnavailable = link.is_active === false;
+  const isExpired = link.expires_at && new Date(link.expires_at) < new Date();
+
+  if (isUnavailable || isExpired) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
         <div className="flex flex-col items-center text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-sad-pictures.png" alt="Sad Pictures" className="h-8 w-auto opacity-70" />
           <h1 className="mt-3 text-xl font-semibold tracking-tight">
-            Ce lien a expire
+            {isUnavailable ? "Ce lien n'est plus disponible" : "Ce lien a expire"}
           </h1>
           <p className="mt-2 text-sm text-white/50">
             Contactez l'expediteur pour obtenir un nouveau lien.
