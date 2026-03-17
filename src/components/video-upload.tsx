@@ -70,6 +70,14 @@ export function VideoUpload({ talents, initialTalentId }: { talents: Talent[]; i
       const result = await createVideo({ talent_id: talentId, title, r2_key: r2Key, file_size_bytes: file.size, duration_seconds: duration, thumbnail_key: thumbnailKey });
       if (result?.error) throw new Error(result.error);
       setState("done");
+      // Auto-tag in background (fire and forget)
+      if (result?.videoId && thumbnailKey) {
+        fetch("/api/analyze-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ video_id: result.videoId }),
+        }).catch(() => {});
+      }
     } catch (err) { setState("error"); setError(err instanceof Error ? err.message : "Erreur inconnue"); } finally { abortRef.current = null; }
   }
 

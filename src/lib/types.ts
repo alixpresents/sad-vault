@@ -15,6 +15,7 @@ export type Video = {
   thumbnail_key: string | null;
   duration_seconds: number | null;
   file_size_bytes: number | null;
+  tags: string[];
   created_at: string;
 };
 

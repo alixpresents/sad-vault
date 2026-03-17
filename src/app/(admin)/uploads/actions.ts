@@ -37,7 +37,7 @@ export async function createVideo(data: {
     return { error: parsed.error.issues[0].message };
   }
 
-  const { error } = await supabase.from("videos").insert(parsed.data);
+  const { data: inserted, error } = await supabase.from("videos").insert(parsed.data).select("id").single();
 
   if (error) {
     return { error: error.message };
@@ -45,6 +45,9 @@ export async function createVideo(data: {
 
   revalidatePath(`/talents/${parsed.data.talent_id}`);
   revalidatePath("/uploads");
+  revalidatePath("/videos");
+
+  return { videoId: inserted.id };
 }
 
 export async function deleteVideo(id: string, talentId: string) {
@@ -127,6 +130,30 @@ export async function replaceVideo(
   }
 
   revalidatePath(`/talents/${talentId}`);
+}
+
+export async function updateVideoTags(
+  videoId: string,
+  tags: string[]
+) {
+  const supabase = await requireAuth();
+
+  if (!z.string().uuid().safeParse(videoId).success) {
+    return { error: "ID invalide" };
+  }
+
+  const cleaned = tags.map((t) => t.toLowerCase().trim()).filter(Boolean).slice(0, 10);
+
+  const { error } = await supabase
+    .from("videos")
+    .update({ tags: cleaned })
+    .eq("id", videoId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/videos");
 }
 
 export async function updateVideoThumbnail(
