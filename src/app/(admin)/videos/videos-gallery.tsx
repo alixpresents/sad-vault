@@ -386,11 +386,11 @@ function InlineEditTitle({ title, onSave, dark = false }: { title: string; onSav
 
   return (
     <p
-      onDoubleClick={() => setEditing(true)}
-      className={`truncate cursor-default transition-colors duration-300 ${
+      onClick={() => setEditing(true)}
+      className={`truncate cursor-pointer transition-colors duration-300 hover:underline ${
         dark ? "text-[14px] font-medium text-white" : "text-[13px] font-semibold text-neutral-900"
       } ${saved ? (dark ? "text-emerald-400" : "text-emerald-600") : ""}`}
-      title="Double-clic pour renommer"
+      title="Cliquer pour renommer"
     >
       {title}
     </p>
