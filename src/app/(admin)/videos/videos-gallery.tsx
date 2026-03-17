@@ -61,17 +61,19 @@ function sortVideos(videos: VideoWithTalent[], sort: SortKey): VideoWithTalent[]
   }
 }
 
-async function analyzeVideo(videoId: string): Promise<string[] | null> {
+async function analyzeVideo(videoId: string): Promise<{ tags: string[] | null; error: string | null }> {
   try {
     const res = await fetch("/api/analyze-video", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ video_id: videoId }),
     });
-    if (!res.ok) return null;
     const data = await res.json();
-    return data.tags ?? null;
-  } catch { return null; }
+    if (!res.ok) return { tags: null, error: data.error || `Erreur ${res.status}` };
+    return { tags: data.tags ?? null, error: null };
+  } catch (err) {
+    return { tags: null, error: err instanceof Error ? err.message : "Erreur reseau" };
+  }
 }
 
 // ─── Main component ─────────────────────────────────────────────
@@ -94,6 +96,7 @@ export function VideosGallery({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -150,20 +153,36 @@ export function VideosGallery({
   }
 
   async function handleAnalyze(videoId: string) {
+    setAnalyzeError(null);
     setAnalyzingIds((p) => new Set(p).add(videoId));
-    await analyzeVideo(videoId);
+    const { error } = await analyzeVideo(videoId);
     setAnalyzingIds((p) => { const n = new Set(p); n.delete(videoId); return n; });
+    if (error) {
+      setAnalyzeError(error);
+      setTimeout(() => setAnalyzeError(null), 5000);
+    }
     router.refresh();
   }
 
   async function handleBulkAnalyze() {
+    setAnalyzeError(null);
     const ids = Array.from(selected).filter((id) => {
       const v = allVideos.find((x) => x.id === id);
       return v?.thumbnail_key;
     });
+    if (ids.length === 0) {
+      setAnalyzeError("Aucune video selectionnee n'a de thumbnail");
+      setTimeout(() => setAnalyzeError(null), 4000);
+      return;
+    }
     setAnalyzingIds(new Set(ids));
-    await Promise.allSettled(ids.map((id) => analyzeVideo(id)));
+    const results = await Promise.allSettled(ids.map((id) => analyzeVideo(id)));
+    const errors = results.filter((r) => r.status === "fulfilled" && r.value.error).length;
     setAnalyzingIds(new Set());
+    if (errors > 0) {
+      setAnalyzeError(`${errors} video${errors > 1 ? "s" : ""} n'ont pas pu etre analysee${errors > 1 ? "s" : ""}`);
+      setTimeout(() => setAnalyzeError(null), 5000);
+    }
     router.refresh();
   }
 
@@ -256,6 +275,13 @@ export function VideosGallery({
           </div>
         )}
       </div>
+
+      {/* Analyze error toast */}
+      {analyzeError && (
+        <div className="fixed right-4 top-4 z-50 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-[13px] font-medium text-red-700 shadow-lg">
+          {analyzeError}
+        </div>
+      )}
 
       {/* Multi-select bar */}
       {selected.size > 0 && (
