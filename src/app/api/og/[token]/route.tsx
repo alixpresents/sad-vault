@@ -5,13 +5,35 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServiceClient } from "@/lib/supabase-service";
 import type { ShareLink, Talent } from "@/lib/types";
+import sharp from "sharp";
 
 export const runtime = "nodejs";
+
+const OG_W = 900;
+const OG_H = 470;
 
 async function getPresignedUrl(key: string): Promise<string | null> {
   try {
     const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: key });
     return await getSignedUrl(r2, command, { expiresIn: 300 });
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch thumbnail from R2, resize to OG dimensions, return as base64 data URL */
+async function fetchAndResizeThumbnail(
+  presignedUrl: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(presignedUrl);
+    if (!res.ok) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const resized = await sharp(buffer)
+      .resize(OG_W, OG_H, { fit: "cover" })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+    return `data:image/jpeg;base64,${resized.toString("base64")}`;
   } catch {
     return null;
   }
@@ -53,8 +75,8 @@ export async function GET(
     if (talent) talentName = (talent as Talent).name;
   }
 
-  // Find the first video that has a thumbnail_key, in video_ids order
-  let thumbnailUrl: string | null = null;
+  // Find the first video thumbnail and resize it
+  let thumbnailDataUrl: string | null = null;
   if (shareLink.video_ids.length > 0) {
     const { data: videos } = await supabase
       .from("videos")
@@ -62,17 +84,18 @@ export async function GET(
       .in("id", shareLink.video_ids);
 
     if (videos) {
-      // Build a map so we can iterate in video_ids order
       const videoMap = new Map<string, string | null>();
       for (const v of videos as { id: string; thumbnail_key: string | null }[]) {
         videoMap.set(v.id, v.thumbnail_key);
       }
-
       for (const id of shareLink.video_ids) {
         const thumbKey = videoMap.get(id);
         if (thumbKey) {
-          thumbnailUrl = await getPresignedUrl(thumbKey);
-          if (thumbnailUrl) break;
+          const presigned = await getPresignedUrl(thumbKey);
+          if (presigned) {
+            thumbnailDataUrl = await fetchAndResizeThumbnail(presigned);
+            if (thumbnailDataUrl) break;
+          }
         }
       }
     }
@@ -87,8 +110,8 @@ export async function GET(
     (
       <div
         style={{
-          width: 1200,
-          height: 630,
+          width: OG_W,
+          height: OG_H,
           display: "flex",
           flexDirection: "column",
           justifyContent: "flex-end",
@@ -97,18 +120,17 @@ export async function GET(
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        {/* Thumbnail background - full cover */}
-        {thumbnailUrl && (
+        {thumbnailDataUrl && (
           <img
-            src={thumbnailUrl}
-            width={1200}
-            height={630}
+            src={thumbnailDataUrl}
+            width={OG_W}
+            height={OG_H}
             style={{
               position: "absolute",
               top: 0,
               left: 0,
-              width: 1200,
-              height: 630,
+              width: OG_W,
+              height: OG_H,
               objectFit: "cover",
             }}
           />
@@ -121,23 +143,22 @@ export async function GET(
             bottom: 0,
             left: 0,
             right: 0,
-            height: thumbnailUrl ? 260 : 630,
+            height: thumbnailDataUrl ? 200 : OG_H,
             display: "flex",
-            background: thumbnailUrl
+            background: thumbnailDataUrl
               ? "linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)"
               : "transparent",
           }}
         />
 
-        {/* Fallback centered watermark when no thumbnail */}
-        {!thumbnailUrl && (
+        {!thumbnailDataUrl && (
           <div
             style={{
               position: "absolute",
               top: 0,
               left: 0,
               right: 0,
-              bottom: 120,
+              bottom: 90,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -145,7 +166,7 @@ export async function GET(
           >
             <span
               style={{
-                fontSize: 32,
+                fontSize: 26,
                 color: "rgba(255,255,255,0.1)",
                 fontWeight: 700,
                 letterSpacing: "0.2em",
@@ -164,14 +185,14 @@ export async function GET(
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-end",
-            padding: "0 48px 44px",
+            padding: "0 36px 32px",
             width: "100%",
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span
               style={{
-                fontSize: 42,
+                fontSize: 32,
                 fontWeight: 700,
                 color: "#fff",
                 lineHeight: 1.1,
@@ -181,7 +202,7 @@ export async function GET(
             </span>
             <span
               style={{
-                fontSize: 22,
+                fontSize: 17,
                 color: "rgba(255,255,255,0.5)",
                 fontWeight: 400,
               }}
@@ -191,7 +212,7 @@ export async function GET(
           </div>
           <span
             style={{
-              fontSize: 16,
+              fontSize: 13,
               color: "rgba(255,255,255,0.25)",
               fontWeight: 500,
               letterSpacing: "0.06em",
@@ -203,8 +224,8 @@ export async function GET(
       </div>
     ),
     {
-      width: 1200,
-      height: 630,
+      width: OG_W,
+      height: OG_H,
     }
   );
 }
