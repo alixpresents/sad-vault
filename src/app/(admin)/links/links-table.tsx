@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, Check, Trash2, ExternalLink } from "lucide-react";
+import { Copy, Check, Trash2, ExternalLink, Pencil } from "lucide-react";
 import type { ShareLink } from "@/lib/types";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { deleteShareLink } from "./actions";
@@ -105,6 +105,14 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
                   >
                     {copiedId === link.id ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
+                  <Link
+                    href={`/links/${link.id}/edit`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="relative z-10 rounded-md border border-neutral-200 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-50 hover:text-neutral-600"
+                    title="Modifier"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Link>
                   <a
                     href={`/s/${link.token}`}
                     target="_blank"
