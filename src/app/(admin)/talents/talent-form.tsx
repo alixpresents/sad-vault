@@ -56,7 +56,7 @@ export function TalentForm({ talent, action }: {
   const inputCls = "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition-colors placeholder:text-neutral-300 focus:border-neutral-400";
 
   return (
-    <form action={formAction} className="max-w-md">
+    <form action={formAction} className="mx-auto max-w-md">
       <div className="mb-5">
         <label htmlFor="name" className={labelCls}>Nom</label>
         <input id="name" type="text" {...register("name")} className={inputCls} />

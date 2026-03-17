@@ -56,7 +56,7 @@ export function ShareLinkForm({ talents, videos }: { talents: Talent[]; videos: 
   const inputCls = "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition-colors placeholder:text-neutral-300 focus:border-neutral-400";
 
   return (
-    <div className="max-w-md">
+    <div className="mx-auto max-w-md">
       <div className="mb-5">
         <label className={labelCls}>Titre (optionnel)</label>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Reel showroom Mars 2026" className={inputCls} />

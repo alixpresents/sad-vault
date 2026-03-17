@@ -81,7 +81,7 @@ export function VideoUpload({ talents, initialTalentId }: { talents: Talent[]; i
   const inputCls = "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition-colors placeholder:text-neutral-300 focus:border-neutral-400";
 
   return (
-    <div className="max-w-md">
+    <div className="mx-auto max-w-md">
       <div className="mb-5">
         <label className={labelCls}>Talent</label>
         <select value={talentId} onChange={(e) => setTalentId(e.target.value)} disabled={isBusy} className={`${inputCls} cursor-pointer`} style={{ opacity: isBusy ? 0.5 : 1 }}>
