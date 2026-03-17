@@ -95,7 +95,7 @@ export default async function DashboardPage() {
   const today = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div>
+    <div className="mx-auto" style={{ maxWidth: 680 }}>
       {/* Greeting */}
       <div className="anim-in anim-d1 mb-8">
         <h1 className="text-[20px] font-semibold tracking-tight text-neutral-900">

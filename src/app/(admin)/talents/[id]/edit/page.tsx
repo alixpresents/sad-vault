@@ -13,7 +13,7 @@ export default async function EditTalentPage({ params }: { params: Promise<{ id:
   const boundAction = updateTalent.bind(null, id);
 
   return (
-    <div>
+    <div className="mx-auto" style={{ maxWidth: 680 }}>
       <nav className="anim-in anim-d1 mb-6 flex items-center gap-1.5 text-[13px]">
         <Link href="/talents" className="text-neutral-400 transition-colors hover:text-neutral-600">Talents</Link>
         <span className="text-neutral-300">›</span>

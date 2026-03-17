@@ -15,7 +15,7 @@ export default async function EditLinkPage({ params }: { params: Promise<{ id: s
   const { data: talents } = await supabase.from("talents").select("*").order("name");
 
   return (
-    <div>
+    <div className="mx-auto" style={{ maxWidth: 680 }}>
       <nav className="anim-in anim-d1 mb-6 flex items-center gap-1.5 text-[13px]">
         <Link href="/links" className="text-neutral-400 transition-colors hover:text-neutral-600">Liens</Link>
         <span className="text-neutral-300">›</span>

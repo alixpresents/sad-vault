@@ -1,6 +1,6 @@
 export default function LinksLoading() {
   return (
-    <div>
+    <div className="mx-auto" style={{ maxWidth: 680 }}>
       <div className="mb-6 flex items-center justify-between">
         <div className="h-5 w-36 rounded bg-neutral-100" />
         <div className="h-8 w-28 rounded-md bg-neutral-100" />

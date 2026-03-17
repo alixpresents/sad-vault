@@ -1,6 +1,6 @@
 export default function DashboardLoading() {
   return (
-    <div>
+    <div className="mx-auto" style={{ maxWidth: 680 }}>
       <div className="mb-8">
         <div className="h-6 w-40 rounded bg-neutral-100" />
         <div className="mt-2 h-4 w-48 rounded bg-neutral-100" />

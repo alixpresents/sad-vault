@@ -8,7 +8,7 @@ export default async function UploadsPage({ searchParams }: { searchParams: Prom
   const { data: talents } = await supabase.from("talents").select("*").order("name");
 
   return (
-    <div>
+    <div className="mx-auto" style={{ maxWidth: 680 }}>
       <div className="anim-in anim-d1 mb-6">
         <h1 className="text-[15px] font-semibold text-neutral-900">Upload</h1>
         <p className="mt-0.5 text-[13px] text-neutral-400">Uploader une video et l'associer a un talent.</p>

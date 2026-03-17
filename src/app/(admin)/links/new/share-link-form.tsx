@@ -31,11 +31,11 @@ function formatDuration(s: number | null) {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
-export function ShareLinkForm({ talents, videos }: { talents: Talent[]; videos: Video[] }) {
+export function ShareLinkForm({ talents, videos, initialVideoIds }: { talents: Talent[]; videos: Video[]; initialVideoIds?: string[] }) {
   const [title, setTitle] = useState("");
   const [customSlug, setCustomSlug] = useState("");
   const [talentId, setTalentId] = useState("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initialVideoIds ?? []));
   const [expiration, setExpiration] = useState("none");
   const [allowDownload, setAllowDownload] = useState(false);
   const [error, setError] = useState<string | null>(null);

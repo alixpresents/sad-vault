@@ -11,7 +11,7 @@ export default async function TalentsPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <div>
+    <div className="mx-auto" style={{ maxWidth: 680 }}>
       <div className="anim-in anim-d1 mb-6 flex items-center justify-between">
         <h1 className="text-[15px] font-semibold text-neutral-900">Talents</h1>
         <Link
