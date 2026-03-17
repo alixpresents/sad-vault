@@ -13,6 +13,103 @@ async function requireAuth() {
   return supabase;
 }
 
+export type DuplicateMatch = {
+  level: "certain" | "very_likely" | "likely" | "possible";
+  videoId: string;
+  title: string;
+  talentName: string;
+  reason: string;
+};
+
+function normalize(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[-_\s]+/g, " ").trim();
+}
+
+function similarity(a: string, b: string): boolean {
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  // Simple similarity: count matching words
+  const wa = new Set(na.split(" "));
+  const wb = new Set(nb.split(" "));
+  const common = [...wa].filter((w) => wb.has(w)).length;
+  const total = Math.max(wa.size, wb.size);
+  return total > 0 && common / total >= 0.8;
+}
+
+export async function checkDuplicate(
+  fileHash: string | null,
+  fileSize: number,
+  fileName: string
+): Promise<DuplicateMatch[]> {
+  const supabase = await requireAuth();
+
+  const { data: allVideos } = await supabase
+    .from("videos")
+    .select("id, title, file_size_bytes, file_hash, original_filename, talent_id, talents(name)")
+    .order("created_at", { ascending: false });
+
+  if (!allVideos || allVideos.length === 0) return [];
+
+  const matches: DuplicateMatch[] = [];
+  const seen = new Set<string>();
+  const fileNameNoExt = fileName.replace(/\.[^.]+$/, "");
+
+  for (const v of allVideos as {
+    id: string; title: string; file_size_bytes: number | null;
+    file_hash: string | null; original_filename: string | null;
+    talent_id: string; talents: { name: string }[] | { name: string } | null;
+  }[]) {
+    const talentName = v.talents
+      ? Array.isArray(v.talents) ? v.talents[0]?.name ?? "" : v.talents.name
+      : "";
+
+    let level: DuplicateMatch["level"] | null = null;
+    let reason = "";
+
+    // 1. Exact hash match
+    if (fileHash && v.file_hash && fileHash === v.file_hash) {
+      level = "certain";
+      reason = "Meme fichier (hash identique)";
+    }
+    // 2. Same original filename
+    else if (v.original_filename) {
+      const existingNoExt = v.original_filename.replace(/\.[^.]+$/, "");
+      if (normalize(fileNameNoExt) === normalize(existingNoExt)) {
+        level = "very_likely";
+        reason = "Meme nom de fichier";
+      }
+    }
+
+    // 3. Similar title (only if no higher match yet)
+    if (!level && similarity(fileNameNoExt, v.title)) {
+      level = "likely";
+      reason = "Titre similaire";
+    }
+
+    // 4. Same file size ±1%
+    if (!level && v.file_size_bytes) {
+      const diff = Math.abs(v.file_size_bytes - fileSize) / fileSize;
+      if (diff <= 0.01) {
+        level = "possible";
+        reason = "Taille identique";
+      }
+    }
+
+    if (level && !seen.has(v.id)) {
+      seen.add(v.id);
+      matches.push({ level, videoId: v.id, title: v.title, talentName, reason });
+    }
+  }
+
+  // Sort by severity
+  const order = { certain: 0, very_likely: 1, likely: 2, possible: 3 };
+  matches.sort((a, b) => order[a.level] - order[b.level]);
+
+  return matches.slice(0, 5);
+}
+
 const createVideoSchema = z.object({
   talent_id: z.string().uuid(),
   title: z.string().min(1).max(500),
@@ -20,6 +117,8 @@ const createVideoSchema = z.object({
   file_size_bytes: z.number().int().positive(),
   duration_seconds: z.number().int().nonnegative().nullable(),
   thumbnail_key: z.string().max(500).nullable(),
+  file_hash: z.string().max(128).nullable(),
+  original_filename: z.string().max(500).nullable(),
 });
 
 export async function createVideo(data: {
@@ -29,10 +128,16 @@ export async function createVideo(data: {
   file_size_bytes: number;
   duration_seconds: number | null;
   thumbnail_key: string | null;
+  file_hash?: string | null;
+  original_filename?: string | null;
 }) {
   const supabase = await requireAuth();
 
-  const parsed = createVideoSchema.safeParse(data);
+  const parsed = createVideoSchema.safeParse({
+    ...data,
+    file_hash: data.file_hash ?? null,
+    original_filename: data.original_filename ?? null,
+  });
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
   }
