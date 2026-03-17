@@ -175,28 +175,30 @@ export function ShareView({
       <div className="min-h-screen bg-black text-white">
         {/* Header */}
         <header className="border-b border-white/[0.06] px-4 py-5 sm:px-8">
-          <div className="mx-auto flex max-w-5xl items-start justify-between">
-            <div className="min-w-0">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-4">
               <Image
-                src="/logo-sad-pictures.png"
+                src="/logo-top-sadp2.png"
                 alt="Sad Pictures"
-                width={160}
-                height={32}
-                className="h-8 w-auto opacity-70"
+                width={56}
+                height={56}
+                className="h-14 w-auto shrink-0"
                 priority
               />
-              {(title || talentName) && (
-                <h1 className="mt-2 truncate text-lg font-semibold tracking-tight sm:text-xl">
-                  {title ?? talentName}
-                </h1>
-              )}
-              {title && talentName && (
-                <p className="mt-0.5 text-sm text-white/40">{talentName}</p>
-              )}
+              <div className="min-w-0">
+                {(title || talentName) && (
+                  <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
+                    {title ?? talentName}
+                  </h1>
+                )}
+                {title && talentName && (
+                  <p className="mt-0.5 text-sm text-white/40">{talentName}</p>
+                )}
+              </div>
             </div>
 
             {/* View mode toggle */}
-            <div className="ml-4 flex shrink-0 items-center gap-1 rounded-lg bg-white/[0.06] p-1">
+            <div className="flex shrink-0 items-center gap-1 rounded-lg bg-white/[0.06] p-1">
               <button
                 type="button"
                 onClick={() => setMode("carousel")}
@@ -240,9 +242,13 @@ export function ShareView({
 
         {/* Footer */}
         <footer className="border-t border-white/[0.06] px-4 py-5 text-center sm:px-8">
-          <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/20">
-            Sad Pictures
-          </p>
+          <Image
+            src="/logo-sad-pictures.png"
+            alt="Sad Pictures"
+            width={120}
+            height={24}
+            className="mx-auto h-8 w-auto"
+          />
         </footer>
       </div>
     </TokenContext>
