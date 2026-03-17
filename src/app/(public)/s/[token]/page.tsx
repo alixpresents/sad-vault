@@ -144,6 +144,7 @@ export default async function SharePage({
     <ShareView
       videos={orderedVideos}
       token={token}
+      shareLinkId={shareLink.id}
       title={shareLink.title}
       talentName={talentName}
       allowDownload={shareLink.allow_download}

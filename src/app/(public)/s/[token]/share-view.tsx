@@ -21,6 +21,7 @@ import {
   Download,
 } from "lucide-react";
 import type { Video } from "@/lib/types";
+import { useViewTracking } from "@/lib/use-view-tracking";
 
 type ViewMode = "carousel" | "list";
 
@@ -147,20 +148,32 @@ function formatDuration(seconds: number | null) {
 
 // ─── Main component ──────────────────────────────────────────────
 
+// ─── Tracking context ────────────────────────────────────────────
+
+const TrackingContext = createContext<ReturnType<typeof useViewTracking> | null>(null);
+
+function useTracking() {
+  return useContext(TrackingContext);
+}
+
 export function ShareView({
   videos,
   token,
+  shareLinkId,
   title,
   talentName,
   allowDownload,
 }: {
   videos: Video[];
   token: string;
+  shareLinkId: string;
   title: string | null;
   talentName: string | null;
   allowDownload: boolean;
 }) {
   const [mode, setMode] = useState<ViewMode>("carousel");
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const tracking = useViewTracking({ shareLinkId, sessionId });
 
   if (videos.length === 0) {
     return (
@@ -172,6 +185,7 @@ export function ShareView({
 
   return (
     <TokenContext value={token}>
+      <TrackingContext value={tracking}>
       <div className="min-h-screen bg-black text-white">
         {/* Header */}
         <header className="border-b border-white/[0.06] px-4 py-5 sm:px-8">
@@ -251,6 +265,7 @@ export function ShareView({
           />
         </footer>
       </div>
+      </TrackingContext>
     </TokenContext>
   );
 }
@@ -267,6 +282,26 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
       <Download className="size-3.5" />
       Telecharger
     </a>
+  );
+}
+
+/** Video element with tracking wired up */
+function CarouselVideoPlayer({ url, videoId, allowDownload }: { url: string; videoId: string; allowDownload: boolean }) {
+  const tracking = useTracking();
+  return (
+    <video
+      key={url}
+      src={url}
+      controls
+      autoPlay
+      playsInline
+      preload="metadata"
+      {...(!allowDownload && { controlsList: "nodownload", disableRemotePlayback: true })}
+      className="h-full w-full"
+      onPlay={() => tracking?.onPlay(videoId)}
+      onPause={() => tracking?.onPause(videoId)}
+      onEnded={() => tracking?.onEnded(videoId)}
+    />
   );
 }
 
@@ -356,15 +391,10 @@ function CarouselView({
       {/* Main player — fixed 16:9 aspect ratio */}
       <div className="relative aspect-video overflow-hidden rounded-lg bg-white/[0.03] ring-1 ring-white/[0.06]">
         {video.url ? (
-          <video
-            key={video.url}
-            src={video.url}
-            controls
-            autoPlay
-            playsInline
-            preload="metadata"
-            {...(!allowDownload && { controlsList: "nodownload", disableRemotePlayback: true })}
-            className="h-full w-full"
+          <CarouselVideoPlayer
+            url={video.url}
+            videoId={activeVideo.id}
+            allowDownload={allowDownload}
           />
         ) : (
           <button
@@ -491,6 +521,24 @@ const ThumbnailChip = memo(function ThumbnailChip({
 
 // ─── List mode ───────────────────────────────────────────────────
 
+function ListVideoPlayer({ url, videoId, allowDownload }: { url: string; videoId: string; allowDownload: boolean }) {
+  const tracking = useTracking();
+  return (
+    <video
+      src={url}
+      controls
+      autoPlay
+      playsInline
+      preload="none"
+      {...(!allowDownload && { controlsList: "nodownload", disableRemotePlayback: true })}
+      className="h-full w-full"
+      onPlay={() => tracking?.onPlay(videoId)}
+      onPause={() => tracking?.onPause(videoId)}
+      onEnded={() => tracking?.onEnded(videoId)}
+    />
+  );
+}
+
 function ListView({
   videos,
   allowDownload,
@@ -550,15 +598,7 @@ const ListItem = memo(function ListItem({
       {/* Player — fixed 16:9 aspect ratio */}
       <div className="relative aspect-video overflow-hidden rounded-lg bg-white/[0.03] ring-1 ring-white/[0.06]">
         {videoUrl ? (
-          <video
-            src={videoUrl}
-            controls
-            autoPlay
-            playsInline
-            preload="none"
-            {...(!allowDownload && { controlsList: "nodownload", disableRemotePlayback: true })}
-            className="h-full w-full"
-          />
+          <ListVideoPlayer url={videoUrl} videoId={video.id} allowDownload={allowDownload} />
         ) : (
           <button
             type="button"

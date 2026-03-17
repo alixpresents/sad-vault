@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createServerClient } from "@/lib/supabase-server";
 import type { ShareLink, Video, Talent } from "@/lib/types";
 import { EditLinkForm } from "./edit-link-form";
+import { LinkAnalytics } from "./link-analytics";
 
 export default async function EditLinkPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,6 +23,9 @@ export default async function EditLinkPage({ params }: { params: Promise<{ id: s
       </nav>
       <div className="anim-in anim-d2">
         <EditLinkForm link={shareLink} allVideos={(allVideos as Video[]) ?? []} talents={(talents as Talent[]) ?? []} />
+      </div>
+      <div className="anim-in anim-d3">
+        <LinkAnalytics shareLinkId={shareLink.id} videos={(allVideos as Video[]) ?? []} />
       </div>
     </div>
   );
