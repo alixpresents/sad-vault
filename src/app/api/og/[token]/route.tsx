@@ -5,7 +5,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServiceClient } from "@/lib/supabase-service";
 import type { ShareLink, Talent } from "@/lib/types";
-import sharp from "sharp";
 
 export const runtime = "nodejs";
 
@@ -16,24 +15,6 @@ async function getPresignedUrl(key: string): Promise<string | null> {
   try {
     const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: key });
     return await getSignedUrl(r2, command, { expiresIn: 300 });
-  } catch {
-    return null;
-  }
-}
-
-/** Fetch thumbnail from R2, resize to OG dimensions, return as base64 data URL */
-async function fetchAndResizeThumbnail(
-  presignedUrl: string
-): Promise<string | null> {
-  try {
-    const res = await fetch(presignedUrl);
-    if (!res.ok) return null;
-    const buffer = Buffer.from(await res.arrayBuffer());
-    const resized = await sharp(buffer)
-      .resize(OG_W, OG_H, { fit: "cover" })
-      .jpeg({ quality: 70 })
-      .toBuffer();
-    return `data:image/jpeg;base64,${resized.toString("base64")}`;
   } catch {
     return null;
   }
@@ -75,8 +56,8 @@ export async function GET(
     if (talent) talentName = (talent as Talent).name;
   }
 
-  // Find the first video thumbnail and resize it
-  let thumbnailDataUrl: string | null = null;
+  // Find the first video thumbnail
+  let thumbnailUrl: string | null = null;
   if (shareLink.video_ids.length > 0) {
     const { data: videos } = await supabase
       .from("videos")
@@ -91,11 +72,8 @@ export async function GET(
       for (const id of shareLink.video_ids) {
         const thumbKey = videoMap.get(id);
         if (thumbKey) {
-          const presigned = await getPresignedUrl(thumbKey);
-          if (presigned) {
-            thumbnailDataUrl = await fetchAndResizeThumbnail(presigned);
-            if (thumbnailDataUrl) break;
-          }
+          thumbnailUrl = await getPresignedUrl(thumbKey);
+          if (thumbnailUrl) break;
         }
       }
     }
@@ -120,9 +98,10 @@ export async function GET(
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        {thumbnailDataUrl && (
+        {/* Thumbnail - satori handles fetch + resize */}
+        {thumbnailUrl && (
           <img
-            src={thumbnailDataUrl}
+            src={thumbnailUrl}
             width={OG_W}
             height={OG_H}
             style={{
@@ -143,15 +122,16 @@ export async function GET(
             bottom: 0,
             left: 0,
             right: 0,
-            height: thumbnailDataUrl ? 200 : OG_H,
+            height: thumbnailUrl ? 200 : OG_H,
             display: "flex",
-            background: thumbnailDataUrl
+            background: thumbnailUrl
               ? "linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)"
               : "transparent",
           }}
         />
 
-        {!thumbnailDataUrl && (
+        {/* Fallback watermark */}
+        {!thumbnailUrl && (
           <div
             style={{
               position: "absolute",
@@ -191,21 +171,12 @@ export async function GET(
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span
-              style={{
-                fontSize: 32,
-                fontWeight: 700,
-                color: "#fff",
-                lineHeight: 1.1,
-              }}
+              style={{ fontSize: 32, fontWeight: 700, color: "#fff", lineHeight: 1.1 }}
             >
               {linkTitle}
             </span>
             <span
-              style={{
-                fontSize: 17,
-                color: "rgba(255,255,255,0.5)",
-                fontWeight: 400,
-              }}
+              style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", fontWeight: 400 }}
             >
               {subtitle}
             </span>
