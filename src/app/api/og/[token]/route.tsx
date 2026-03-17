@@ -4,16 +4,13 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServiceClient } from "@/lib/supabase-service";
-import type { ShareLink, Video, Talent } from "@/lib/types";
+import type { ShareLink, Talent } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-async function getThumbnailUrl(thumbnailKey: string): Promise<string | null> {
+async function getPresignedUrl(key: string): Promise<string | null> {
   try {
-    const command = new GetObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: thumbnailKey,
-    });
+    const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: key });
     return await getSignedUrl(r2, command, { expiresIn: 300 });
   } catch {
     return null;
@@ -26,7 +23,6 @@ export async function GET(
 ) {
   const { token } = await params;
 
-  // Validate token format
   if (!/^[a-z0-9]+$/.test(token) || token.length < 12) {
     return new Response("Invalid token", { status: 400 });
   }
@@ -57,21 +53,35 @@ export async function GET(
     if (talent) talentName = (talent as Talent).name;
   }
 
-  // Get first video thumbnail
+  // Find the first video that has a thumbnail_key, in video_ids order
   let thumbnailUrl: string | null = null;
   if (shareLink.video_ids.length > 0) {
-    const { data: video } = await supabase
+    const { data: videos } = await supabase
       .from("videos")
-      .select("thumbnail_key")
-      .eq("id", shareLink.video_ids[0])
-      .single();
+      .select("id, thumbnail_key")
+      .in("id", shareLink.video_ids);
 
-    if (video && (video as Video).thumbnail_key) {
-      thumbnailUrl = await getThumbnailUrl((video as Video).thumbnail_key!);
+    if (videos) {
+      // Build a map so we can iterate in video_ids order
+      const videoMap = new Map<string, string | null>();
+      for (const v of videos as { id: string; thumbnail_key: string | null }[]) {
+        videoMap.set(v.id, v.thumbnail_key);
+      }
+
+      for (const id of shareLink.video_ids) {
+        const thumbKey = videoMap.get(id);
+        if (thumbKey) {
+          thumbnailUrl = await getPresignedUrl(thumbKey);
+          if (thumbnailUrl) break;
+        }
+      }
     }
   }
 
   const videoCount = shareLink.video_ids.length;
+  const subtitle = talentName
+    ? `${talentName} · ${videoCount} video${videoCount !== 1 ? "s" : ""}`
+    : `${videoCount} video${videoCount !== 1 ? "s" : ""}`;
 
   return new ImageResponse(
     (
@@ -87,12 +97,12 @@ export async function GET(
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        {/* Thumbnail background */}
-        {thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
+        {/* Thumbnail background - full cover */}
+        {thumbnailUrl && (
           <img
             src={thumbnailUrl}
-            alt=""
+            width={1200}
+            height={630}
             style={{
               position: "absolute",
               top: 0,
@@ -102,39 +112,66 @@ export async function GET(
               objectFit: "cover",
             }}
           />
-        ) : null}
+        )}
 
-        {/* Gradient overlay at bottom */}
+        {/* Gradient overlay */}
         <div
           style={{
             position: "absolute",
             bottom: 0,
             left: 0,
             right: 0,
-            height: 250,
+            height: thumbnailUrl ? 260 : 630,
             display: "flex",
             background: thumbnailUrl
-              ? "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)"
+              ? "linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)"
               : "transparent",
           }}
         />
 
-        {/* Bottom content */}
+        {/* Fallback centered watermark when no thumbnail */}
+        {!thumbnailUrl && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 120,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 32,
+                color: "rgba(255,255,255,0.1)",
+                fontWeight: 700,
+                letterSpacing: "0.2em",
+                textTransform: "uppercase" as const,
+              }}
+            >
+              SAD PICTURES
+            </span>
+          </div>
+        )}
+
+        {/* Bottom bar */}
         <div
           style={{
             position: "relative",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-end",
-            padding: "0 48px 40px",
+            padding: "0 48px 44px",
             width: "100%",
           }}
         >
-          {/* Left: title + talent */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span
               style={{
-                fontSize: 40,
+                fontSize: 42,
                 fontWeight: 700,
                 color: "#fff",
                 lineHeight: 1.1,
@@ -149,52 +186,20 @@ export async function GET(
                 fontWeight: 400,
               }}
             >
-              {talentName
-                ? `${talentName} · ${videoCount} video${videoCount !== 1 ? "s" : ""}`
-                : `${videoCount} video${videoCount !== 1 ? "s" : ""}`}
+              {subtitle}
             </span>
           </div>
-
-          {/* Right: Sad Pictures text */}
           <span
             style={{
               fontSize: 16,
-              color: "rgba(255,255,255,0.3)",
+              color: "rgba(255,255,255,0.25)",
               fontWeight: 500,
-              letterSpacing: "0.05em",
+              letterSpacing: "0.06em",
             }}
           >
             Sad Pictures
           </span>
         </div>
-
-        {/* No thumbnail fallback: centered title */}
-        {!thumbnailUrl && (
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 100,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 28,
-                color: "rgba(255,255,255,0.15)",
-                fontWeight: 600,
-                letterSpacing: "0.15em",
-                textTransform: "uppercase" as const,
-              }}
-            >
-              SAD PICTURES
-            </span>
-          </div>
-        )}
       </div>
     ),
     {

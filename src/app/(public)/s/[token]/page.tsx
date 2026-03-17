@@ -41,11 +41,13 @@ export async function generateMetadata({
     ? `${talentName} · ${videoCount} video${videoCount !== 1 ? "s" : ""}`
     : `${videoCount} video${videoCount !== 1 ? "s" : ""}`;
 
-  const ogImageUrl = `/api/og/${token}`;
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://reel.sad-pictures.com";
+  const ogImageUrl = `${baseUrl}/api/og/${token}`;
 
   return {
     title,
     description,
+    metadataBase: new URL(baseUrl),
     openGraph: {
       title,
       description,
