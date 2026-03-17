@@ -11,6 +11,7 @@ import type { Video } from "@/lib/types";
 import { deleteVideo, updateVideoTitle, replaceVideo, updateVideoTags, removeVideoTag } from "@/app/(admin)/uploads/actions";
 import { seekAndCapture, uploadThumbnail } from "@/lib/thumbnail";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ThumbnailPicker } from "@/components/thumbnail-picker";
 
 type VideoWithTalent = Video & { talent_name: string; talent_slug: string };
 type VideoStats = { link_count: number; view_count: number };
@@ -406,6 +407,7 @@ function VideoGridCard({
   onSelect: () => void; onPlay: () => void; onDelete: () => void; onAnalyze: () => void; onTagClick: (tag: string) => void; onRemoveTag: (tag: string) => void; onTitleChange: (title: string) => void;
 }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [showThumbPicker, setShowThumbPicker] = useState(false);
 
   useEffect(() => {
     if (!video.thumbnail_key) return;
@@ -441,6 +443,10 @@ function VideoGridCard({
               <Sparkles className={`h-3.5 w-3.5 ${isAnalyzing ? "animate-pulse" : ""}`} />
             </button>
           )}
+          {/* Thumbnail picker button */}
+          <button onClick={(e) => { e.stopPropagation(); setShowThumbPicker(true); }} className="flex size-8 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70" title="Changer le thumbnail">
+            <Camera className="h-3.5 w-3.5" />
+          </button>
         </div>
         {/* Checkbox */}
         <button onClick={(e) => { e.stopPropagation(); onSelect(); }} className={`absolute left-2 top-2 rounded transition-all ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
@@ -479,6 +485,7 @@ function VideoGridCard({
           <p className="mt-0.5 text-[10px] text-neutral-300">{stats.link_count} lien{stats.link_count !== 1 ? "s" : ""} · {stats.view_count} vue{stats.view_count !== 1 ? "s" : ""}</p>
         )}
       </div>
+      <ThumbnailPicker video={video} talentSlug={video.talent_slug} open={showThumbPicker} onOpenChange={setShowThumbPicker} />
     </div>
   );
 }
@@ -496,6 +503,7 @@ function VideoModal({
   const replaceRef = useRef<HTMLInputElement>(null);
   const [replacing, setReplacing] = useState(false);
   const [replaceProgress, setReplaceProgress] = useState(0);
+  const [showThumbPicker, setShowThumbPicker] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [localTags, setLocalTags] = useState<string[]>(video.tags ?? []);
 
@@ -604,11 +612,13 @@ function VideoModal({
             <button onClick={onAnalyze} disabled={isAnalyzing || !video.thumbnail_key} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white/70 disabled:opacity-30" title="Auto-tag IA">
               <Sparkles className={`h-3.5 w-3.5 ${isAnalyzing ? "animate-pulse" : ""}`} />
             </button>
+            <button onClick={() => setShowThumbPicker(true)} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white/70" title="Changer le thumbnail"><Camera className="h-3.5 w-3.5" /></button>
             <button onClick={() => replaceRef.current?.click()} disabled={replacing} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white/70" title="Remplacer"><RefreshCw className={`h-3.5 w-3.5 ${replacing ? "animate-spin" : ""}`} /></button>
             <button onClick={onDelete} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-red-500/20 hover:text-red-400" title="Supprimer"><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
         </div>
         <input ref={replaceRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" onChange={handleReplace} />
+        <ThumbnailPicker video={video} talentSlug={video.talent_slug} open={showThumbPicker} onOpenChange={(open) => { setShowThumbPicker(open); if (!open) onRefresh(); }} />
       </div>
     </div>
   );
