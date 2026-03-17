@@ -1,10 +1,4 @@
-import {
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
-import { AdminSidebar } from "@/components/admin-sidebar";
-import { Separator } from "@/components/ui/separator";
+import { AdminNav } from "@/components/admin-nav";
 
 export default function AdminLayout({
   children,
@@ -12,15 +6,11 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <SidebarProvider>
-      <AdminSidebar />
-      <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 !h-4" />
-        </header>
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="flex h-full min-h-screen flex-col bg-white">
+      <AdminNav />
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
+        {children}
+      </main>
+    </div>
   );
 }

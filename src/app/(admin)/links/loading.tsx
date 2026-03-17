@@ -1,16 +1,11 @@
-import { Skeleton } from "@/components/ui/skeleton";
-
 export default function LinksLoading() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="mt-2 h-4 w-72" />
-        </div>
-        <Skeleton className="h-8 w-32" />
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div className="h-5 w-36 rounded bg-neutral-100" />
+        <div className="h-8 w-28 rounded-md bg-neutral-100" />
       </div>
-      <Skeleton className="h-80 rounded-lg" />
+      <div className="grid grid-cols-2 gap-3">{[0, 1, 2, 3].map((i) => <div key={i} className="h-28 rounded-lg border border-neutral-200 bg-white shadow-sm" />)}</div>
     </div>
   );
 }

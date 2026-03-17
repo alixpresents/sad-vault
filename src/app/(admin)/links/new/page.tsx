@@ -1,34 +1,25 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { createServerClient } from "@/lib/supabase-server";
-import { Button } from "@/components/ui/button";
 import type { Talent, Video } from "@/lib/types";
 import { ShareLinkForm } from "./share-link-form";
 
 export default async function NewLinkPage() {
   const supabase = await createServerClient();
-
   const [{ data: talents }, { data: videos }] = await Promise.all([
     supabase.from("talents").select("*").order("name"),
     supabase.from("videos").select("*").order("created_at", { ascending: false }),
   ]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon-sm" asChild>
-          <Link href="/links">
-            <ArrowLeft />
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Nouveau lien de partage
-        </h1>
+    <div>
+      <nav className="anim-in anim-d1 mb-6 flex items-center gap-1.5 text-[13px]">
+        <Link href="/links" className="text-neutral-400 transition-colors hover:text-neutral-600">Liens</Link>
+        <span className="text-neutral-300">›</span>
+        <span className="font-medium text-neutral-900">Nouveau lien de partage</span>
+      </nav>
+      <div className="anim-in anim-d2">
+        <ShareLinkForm talents={(talents as Talent[]) ?? []} videos={(videos as Video[]) ?? []} />
       </div>
-      <ShareLinkForm
-        talents={(talents as Talent[]) ?? []}
-        videos={(videos as Video[]) ?? []}
-      />
     </div>
   );
 }

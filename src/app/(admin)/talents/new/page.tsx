@@ -1,23 +1,18 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { TalentForm } from "../talent-form";
 import { createTalent } from "../actions";
 
 export default function NewTalentPage() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon-sm" asChild>
-          <Link href="/talents">
-            <ArrowLeft />
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Nouveau talent
-        </h1>
+    <div>
+      <nav className="anim-in anim-d1 mb-6 flex items-center gap-1.5 text-[13px]">
+        <Link href="/talents" className="text-neutral-400 transition-colors hover:text-neutral-600">Talents</Link>
+        <span className="text-neutral-300">›</span>
+        <span className="font-medium text-neutral-900">Nouveau talent</span>
+      </nav>
+      <div className="anim-in anim-d2">
+        <TalentForm action={createTalent} />
       </div>
-      <TalentForm action={createTalent} />
     </div>
   );
 }

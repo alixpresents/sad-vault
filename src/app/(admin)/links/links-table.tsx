@@ -2,50 +2,38 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, Trash2, ExternalLink, Check, Pencil } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Copy, Check, Trash2, ExternalLink } from "lucide-react";
 import type { ShareLink } from "@/lib/types";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { deleteShareLink } from "./actions";
 
-function isExpired(expiresAt: string | null) {
-  if (!expiresAt) return false;
-  return new Date(expiresAt) < new Date();
+function getLinkStatus(expiresAt: string | null) {
+  if (!expiresAt) return "active" as const;
+  const exp = new Date(expiresAt);
+  if (exp <= new Date()) return "expired" as const;
+  if ((exp.getTime() - Date.now()) / 86400000 <= 7) return "expiring" as const;
+  return "active" as const;
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+function getRelativeTime(dateStr: string) {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffH = Math.floor(diffMin / 60);
+  const diffD = Math.floor(diffH / 24);
+  if (diffMin < 1) return "A l'instant";
+  if (diffMin < 60) return `il y a ${diffMin}min`;
+  if (diffH < 24) return `il y a ${diffH}h`;
+  if (diffD < 30) return `il y a ${diffD}j`;
+  return new Date(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-export function LinksTable({
-  links,
-  talentMap,
-}: {
-  links: ShareLink[];
-  talentMap: Map<string, string>;
-}) {
+const statusConfig = {
+  active: { borderColor: "border-t-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-400", label: "Actif" },
+  expiring: { borderColor: "border-t-amber-400", badge: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-400", label: "" },
+  expired: { borderColor: "border-t-neutral-300", badge: "bg-neutral-100 text-neutral-500 border-neutral-200", dot: "bg-neutral-400", label: "Expire" },
+};
+
+export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap: Map<string, string> }) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -59,131 +47,96 @@ export function LinksTable({
   }
 
   function copyLink(token: string, id: string) {
-    const url = `${window.location.origin}/s/${token}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   }
 
   if (links.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-        <p className="text-sm text-muted-foreground">
-          Aucun lien de partage pour le moment.
-        </p>
+      <div className="flex flex-col items-center rounded-lg border border-dashed border-neutral-200 py-14 text-center">
+        <p className="text-[14px] font-medium text-neutral-500">Aucun lien de partage</p>
       </div>
     );
   }
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Titre</TableHead>
-              <TableHead>Talent</TableHead>
-              <TableHead>Videos</TableHead>
-              <TableHead>Vues</TableHead>
-              <TableHead>Expiration</TableHead>
-              <TableHead>Cree le</TableHead>
-              <TableHead className="w-[120px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {links.map((link) => {
-              const expired = isExpired(link.expires_at);
-              return (
-                <TableRow key={link.id}>
-                  <TableCell className="font-medium">
+      <div className="grid grid-cols-2 gap-3">
+        {links.map((link) => {
+          const status = getLinkStatus(link.expires_at);
+          const cfg = statusConfig[status];
+          let badgeLabel = cfg.label;
+          if (status === "expiring" && link.expires_at) {
+            const days = Math.ceil((new Date(link.expires_at).getTime() - Date.now()) / 86400000);
+            badgeLabel = `Expire ${days}j`;
+          }
+          const videoCount = Array.isArray(link.video_ids) ? link.video_ids.length : 0;
+
+          return (
+            <div
+              key={link.id}
+              className={`group relative rounded-lg border border-neutral-200 border-t-2 ${cfg.borderColor} bg-white p-4 shadow-sm transition-all hover:shadow-md`}
+            >
+              <Link href={`/links/${link.id}/edit`} className="absolute inset-0 rounded-lg" />
+              <div className="relative">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="truncate text-[13px] font-semibold text-neutral-900">
                     {link.title || "Sans titre"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {link.talent_id
-                      ? talentMap.get(link.talent_id) ?? "-"
-                      : "-"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {link.video_ids.length} video
-                      {link.video_ids.length > 1 ? "s" : ""}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {link.view_count}
-                  </TableCell>
-                  <TableCell>
-                    {link.expires_at ? (
-                      <Badge variant={expired ? "destructive" : "secondary"}>
-                        {expired ? "Expire" : formatDate(link.expires_at)}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">Illimite</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(link.created_at)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => copyLink(link.token, link.id)}
-                      >
-                        {copiedId === link.id ? (
-                          <Check className="text-green-600" />
-                        ) : (
-                          <Copy />
-                        )}
-                      </Button>
-                      <Button variant="ghost" size="icon-xs" asChild>
-                        <Link href={`/links/${link.id}/edit`}>
-                          <Pencil />
-                        </Link>
-                      </Button>
-                      <Button variant="ghost" size="icon-xs" asChild>
-                        <a
-                          href={`/s/${link.token}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink />
-                        </a>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => setDeleteId(link.id)}
-                      >
-                        <Trash2 className="text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+                  </span>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium ${cfg.badge}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                    {badgeLabel}
+                  </span>
+                </div>
+                {link.talent_id && talentMap.get(link.talent_id) && (
+                  <p className="mb-1.5 text-[12px] text-neutral-500">{talentMap.get(link.talent_id)}</p>
+                )}
+                <div className="mb-3 flex items-center gap-3 text-[11px] text-neutral-400">
+                  <span>{videoCount} video{videoCount !== 1 ? "s" : ""}</span>
+                  <span>{link.view_count} vue{link.view_count !== 1 ? "s" : ""}</span>
+                  <span className="ml-auto">{getRelativeTime(link.created_at)}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); copyLink(link.token, link.id); }}
+                    className="relative z-10 rounded-md border border-neutral-200 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-50 hover:text-neutral-600"
+                    title="Copier le lien"
+                  >
+                    {copiedId === link.id ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                  <a
+                    href={`/s/${link.token}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="relative z-10 rounded-md border border-neutral-200 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-50 hover:text-neutral-600"
+                    title="Ouvrir"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteId(link.id); }}
+                    className="relative z-10 ml-auto rounded-md p-1.5 text-neutral-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                    title="Supprimer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce lien ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Le lien ne sera plus accessible par les personnes avec qui il a ete
-              partage.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={deleting}>
-              {deleting ? "Suppression..." : "Supprimer"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleteId}
+        title="Supprimer ce lien ?"
+        message="Le lien ne sera plus accessible par les personnes avec qui il a ete partage."
+        confirmLabel={deleting ? "Suppression..." : "Supprimer"}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+      />
     </>
   );
 }

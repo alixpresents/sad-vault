@@ -1,16 +1,11 @@
-import { Skeleton } from "@/components/ui/skeleton";
-
 export default function UploadsLoading() {
   return (
-    <div className="space-y-6">
-      <div>
-        <Skeleton className="h-8 w-28" />
-        <Skeleton className="mt-2 h-4 w-64" />
-      </div>
-      <div className="max-w-lg space-y-6">
-        <Skeleton className="h-10 rounded-lg" />
-        <Skeleton className="h-10 rounded-lg" />
-        <Skeleton className="h-40 rounded-lg" />
+    <div>
+      <div className="mb-6"><div className="h-5 w-16 rounded bg-neutral-100" /><div className="mt-1 h-4 w-64 rounded bg-neutral-100" /></div>
+      <div className="max-w-md space-y-5">
+        <div className="h-10 rounded-lg bg-neutral-100" />
+        <div className="h-10 rounded-lg bg-neutral-100" />
+        <div className="h-32 rounded-lg border border-dashed border-neutral-200" />
       </div>
     </div>
   );

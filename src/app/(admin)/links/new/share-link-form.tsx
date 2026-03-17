@@ -1,19 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Film } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { Talent, Video } from "@/lib/types";
 import { createShareLink } from "../actions";
 
@@ -29,226 +16,103 @@ function getExpirationDate(value: string): string | null {
   if (value === "none") return null;
   const now = new Date();
   switch (value) {
-    case "24h":
-      now.setHours(now.getHours() + 24);
-      break;
-    case "7d":
-      now.setDate(now.getDate() + 7);
-      break;
-    case "30d":
-      now.setDate(now.getDate() + 30);
-      break;
-    case "90d":
-      now.setDate(now.getDate() + 90);
-      break;
+    case "24h": now.setHours(now.getHours() + 24); break;
+    case "7d": now.setDate(now.getDate() + 7); break;
+    case "30d": now.setDate(now.getDate() + 30); break;
+    case "90d": now.setDate(now.getDate() + 90); break;
   }
   return now.toISOString();
 }
 
-function formatDuration(seconds: number | null) {
-  if (!seconds) return "--:--";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+function formatDuration(s: number | null) {
+  if (!s) return "--:--";
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
-export function ShareLinkForm({
-  talents,
-  videos,
-}: {
-  talents: Talent[];
-  videos: Video[];
-}) {
+export function ShareLinkForm({ talents, videos }: { talents: Talent[]; videos: Video[] }) {
   const [title, setTitle] = useState("");
-  const [talentId, setTalentId] = useState<string>("all");
-  const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(
-    new Set()
-  );
+  const [talentId, setTalentId] = useState("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expiration, setExpiration] = useState("none");
   const [allowDownload, setAllowDownload] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Filter videos by selected talent
-  const filteredVideos = useMemo(() => {
-    if (talentId === "all") return videos;
-    return videos.filter((v) => v.talent_id === talentId);
-  }, [videos, talentId]);
+  const filtered = useMemo(() => talentId === "all" ? videos : videos.filter((v) => v.talent_id === talentId), [videos, talentId]);
+  const talentMap = useMemo(() => { const m = new Map<string, string>(); talents.forEach((t) => m.set(t.id, t.name)); return m; }, [talents]);
 
-  // Build talent name lookup
-  const talentMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const t of talents) map.set(t.id, t.name);
-    return map;
-  }, [talents]);
-
-  function toggleVideo(id: string) {
-    setSelectedVideoIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    if (selectedVideoIds.size === filteredVideos.length) {
-      setSelectedVideoIds(new Set());
-    } else {
-      setSelectedVideoIds(new Set(filteredVideos.map((v) => v.id)));
-    }
-  }
+  function toggle(id: string) { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  function toggleAll() { setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map((v) => v.id))); }
 
   async function handleSubmit() {
-    if (selectedVideoIds.size === 0) {
-      setError("Selectionnez au moins une video.");
-      return;
-    }
-
-    setError(null);
-    setSubmitting(true);
-
-    const result = await createShareLink({
-      title: title || null,
-      talent_id: talentId === "all" ? null : talentId,
-      video_ids: Array.from(selectedVideoIds),
-      expires_at: getExpirationDate(expiration),
-      allow_download: allowDownload,
-    });
-
-    if (result?.error) {
-      setError(result.error);
-      setSubmitting(false);
-    }
+    if (selected.size === 0) { setError("Selectionnez au moins une video."); return; }
+    setError(null); setSubmitting(true);
+    const result = await createShareLink({ title: title || null, talent_id: talentId === "all" ? null : talentId, video_ids: Array.from(selected), expires_at: getExpirationDate(expiration), allow_download: allowDownload });
+    if (result?.error) { setError(result.error); setSubmitting(false); }
   }
 
+  const labelCls = "mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-neutral-500";
+  const inputCls = "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition-colors placeholder:text-neutral-300 focus:border-neutral-400";
+
   return (
-    <div className="max-w-2xl space-y-6">
-      {/* Title */}
-      <div className="space-y-2">
-        <Label htmlFor="title">Titre (optionnel)</Label>
-        <Input
-          id="title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ex: Reel showroom Mars 2026"
-        />
+    <div className="max-w-md">
+      <div className="mb-5">
+        <label className={labelCls}>Titre (optionnel)</label>
+        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Reel showroom Mars 2026" className={inputCls} />
       </div>
-
-      {/* Talent filter */}
-      <div className="space-y-2">
-        <Label>Filtrer par talent</Label>
-        <Select
-          value={talentId}
-          onValueChange={(v) => {
-            setTalentId(v);
-            setSelectedVideoIds(new Set());
-          }}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les talents</SelectItem>
-            {talents.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mb-5">
+        <label className={labelCls}>Filtrer par talent</label>
+        <select value={talentId} onChange={(e) => { setTalentId(e.target.value); setSelected(new Set()); }} className={`${inputCls} cursor-pointer`}>
+          <option value="all">Tous les talents</option>
+          {talents.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
       </div>
-
-      {/* Video selection */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>
-            Videos ({selectedVideoIds.size}/{filteredVideos.length})
-          </Label>
-          {filteredVideos.length > 0 && (
-            <Button variant="ghost" size="xs" onClick={toggleAll}>
-              {selectedVideoIds.size === filteredVideos.length
-                ? "Tout deselectionner"
-                : "Tout selectionner"}
-            </Button>
+      <div className="mb-5">
+        <div className="mb-1.5 flex items-center justify-between">
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Videos ({selected.size}/{filtered.length})</label>
+          {filtered.length > 0 && (
+            <button onClick={toggleAll} className="text-[11px] text-neutral-400 transition-colors hover:text-neutral-600">
+              {selected.size === filtered.length ? "Tout deselectionner" : "Tout selectionner"}
+            </button>
           )}
         </div>
-
-        {filteredVideos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Aucune video disponible.
-            </p>
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center rounded-lg border border-dashed border-neutral-200 py-8 text-center">
+            <p className="text-[13px] text-neutral-400">Aucune video disponible</p>
           </div>
         ) : (
-          <div className="max-h-80 space-y-1 overflow-y-auto rounded-lg border p-2">
-            {filteredVideos.map((video) => (
-              <label
-                key={video.id}
-                className="flex cursor-pointer items-center gap-3 rounded-md p-2 transition-colors hover:bg-muted"
-              >
-                <Checkbox
-                  checked={selectedVideoIds.has(video.id)}
-                  onCheckedChange={() => toggleVideo(video.id)}
-                />
-                <Film className="size-4 shrink-0 text-muted-foreground" />
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-neutral-200">
+            {filtered.map((video, i) => (
+              <label key={video.id} className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors hover:bg-neutral-50 ${i < filtered.length - 1 ? "border-b border-neutral-100" : ""}`}>
+                <input type="checkbox" checked={selected.has(video.id)} onChange={() => toggle(video.id)} className="h-3.5 w-3.5 accent-neutral-900" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{video.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {talentId === "all" && talentMap.get(video.talent_id)
-                      ? `${talentMap.get(video.talent_id)} - `
-                      : ""}
-                    {formatDuration(video.duration_seconds)}
-                  </p>
+                  <p className="truncate text-[12px] font-medium text-neutral-700">{video.title}</p>
+                  <p className="text-[10px] text-neutral-400">{talentId === "all" && talentMap.get(video.talent_id) ? `${talentMap.get(video.talent_id)} · ` : ""}{formatDuration(video.duration_seconds)}</p>
                 </div>
               </label>
             ))}
           </div>
         )}
       </div>
-
-      {/* Expiration */}
-      <div className="space-y-2">
-        <Label>Expiration</Label>
-        <Select value={expiration} onValueChange={setExpiration}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {EXPIRATION_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mb-5">
+        <label className={labelCls}>Expiration</label>
+        <select value={expiration} onChange={(e) => setExpiration(e.target.value)} className={`${inputCls} cursor-pointer`}>
+          {EXPIRATION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
-
-      {/* Download toggle */}
-      <div className="flex items-center justify-between rounded-lg border p-3">
+      <div className="mb-6 flex items-center justify-between rounded-lg border border-neutral-200 p-3">
         <div>
-          <Label htmlFor="allow-download">Autoriser le telechargement</Label>
-          <p className="text-xs text-muted-foreground">
-            Permet au destinataire de telecharger les videos.
-          </p>
+          <p className="text-[12px] font-medium text-neutral-700">Autoriser le telechargement</p>
+          <p className="text-[11px] text-neutral-400">Permet au destinataire de telecharger les videos.</p>
         </div>
-        <Switch
-          id="allow-download"
-          checked={allowDownload}
-          onCheckedChange={setAllowDownload}
-        />
+        <button onClick={() => setAllowDownload(!allowDownload)} className={`relative h-5 w-9 rounded-full transition-colors ${allowDownload ? "bg-neutral-900" : "bg-neutral-200"}`}>
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${allowDownload ? "translate-x-4" : "translate-x-0.5"}`} />
+        </button>
       </div>
-
-      {/* Error */}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {/* Submit */}
-      <Button onClick={handleSubmit} disabled={submitting}>
+      {error && <p className="mb-4 text-[12px] text-red-600">{error}</p>}
+      <button onClick={handleSubmit} disabled={submitting} className="rounded-md bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50">
         {submitting ? "Creation..." : "Creer le lien"}
-      </Button>
+      </button>
     </div>
   );
 }
