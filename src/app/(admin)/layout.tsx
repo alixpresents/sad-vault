@@ -8,7 +8,7 @@ export default function AdminLayout({
   return (
     <div className="flex h-full min-h-screen flex-col bg-white">
       <AdminNav />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
+      <main className="mx-auto w-full flex-1" style={{ maxWidth: 680, padding: "3rem 1.5rem" }}>
         {children}
       </main>
     </div>
