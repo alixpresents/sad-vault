@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { filename, contentType, talentSlug, type } = body;
+  const { filename, contentType, talentSlug, type, replaceKey } = body;
 
   if (!filename || !contentType || !talentSlug) {
     return NextResponse.json(
@@ -44,11 +44,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const uuid = crypto.randomUUID();
   let r2Key: string;
 
-  if (type === "thumbnail") {
-    r2Key = `thumbnails/${talentSlug}/${uuid}.jpg`;
+  if (replaceKey && typeof replaceKey === "string" && replaceKey.startsWith("videos/")) {
+    // Overwrite existing file at the same key
+    r2Key = replaceKey;
+  } else if (type === "thumbnail") {
+    r2Key = `thumbnails/${talentSlug}/${crypto.randomUUID()}.jpg`;
   } else {
     const ext = filename.split(".").pop()?.toLowerCase();
     if (!ext || !["mp4", "mov", "webm"].includes(ext)) {
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    r2Key = `videos/${talentSlug}/${uuid}.${ext}`;
+    r2Key = `videos/${talentSlug}/${crypto.randomUUID()}.${ext}`;
   }
 
   const command = new PutObjectCommand({

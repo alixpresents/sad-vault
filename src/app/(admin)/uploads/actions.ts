@@ -87,6 +87,48 @@ export async function updateVideoTitle(
   revalidatePath(`/talents/${talentId}`);
 }
 
+const replaceVideoSchema = z.object({
+  file_size_bytes: z.number().int().positive(),
+  duration_seconds: z.number().int().nonnegative().nullable(),
+  thumbnail_key: z.string().max(500).nullable(),
+});
+
+export async function replaceVideo(
+  videoId: string,
+  talentId: string,
+  data: {
+    file_size_bytes: number;
+    duration_seconds: number | null;
+    thumbnail_key: string | null;
+  }
+) {
+  const supabase = await requireAuth();
+
+  if (!z.string().uuid().safeParse(videoId).success) {
+    return { error: "ID invalide" };
+  }
+
+  const parsed = replaceVideoSchema.safeParse(data);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+
+  const { error } = await supabase
+    .from("videos")
+    .update({
+      file_size_bytes: parsed.data.file_size_bytes,
+      duration_seconds: parsed.data.duration_seconds,
+      thumbnail_key: parsed.data.thumbnail_key,
+    })
+    .eq("id", videoId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/talents/${talentId}`);
+}
+
 export async function updateVideoThumbnail(
   videoId: string,
   talentId: string,
