@@ -11,14 +11,65 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { token } = await params;
   const supabase = createServiceClient();
+
   const { data: link } = await supabase
     .from("share_links")
-    .select("title")
+    .select("title, talent_id, video_ids")
     .eq("token", token)
     .single();
+
+  if (!link) {
+    return { title: "Lien introuvable" };
+  }
+
+  const shareLink = link as { title: string | null; talent_id: string | null; video_ids: string[] };
+  const title = shareLink.title || "Reel";
+  const videoCount = shareLink.video_ids?.length ?? 0;
+
+  // Fetch talent name for description
+  let talentName: string | null = null;
+  if (shareLink.talent_id) {
+    const { data: talent } = await supabase
+      .from("talents")
+      .select("name")
+      .eq("id", shareLink.talent_id)
+      .single();
+    if (talent) talentName = (talent as Talent).name;
+  }
+
+  const description = talentName
+    ? `${talentName} · ${videoCount} video${videoCount !== 1 ? "s" : ""}`
+    : `${videoCount} video${videoCount !== 1 ? "s" : ""}`;
+
+  const ogImageUrl = `/api/og/${token}`;
+
   return {
-    title: link ? (link as { title: string | null }).title ?? "Reel" : "Lien",
-    robots: { index: false, follow: false },
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "video.other",
+      siteName: "Sad Pictures",
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImageUrl],
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
   };
 }
 
