@@ -132,6 +132,33 @@ export async function replaceVideo(
   revalidatePath(`/talents/${talentId}`);
 }
 
+export async function removeVideoTag(videoId: string, tag: string) {
+  const supabase = await requireAuth();
+
+  if (!z.string().uuid().safeParse(videoId).success) {
+    return { error: "ID invalide" };
+  }
+
+  const { data: video } = await supabase
+    .from("videos")
+    .select("tags")
+    .eq("id", videoId)
+    .single();
+
+  if (!video) return { error: "Video introuvable" };
+
+  const updated = ((video as { tags: string[] }).tags ?? []).filter((t) => t !== tag);
+
+  const { error } = await supabase
+    .from("videos")
+    .update({ tags: updated })
+    .eq("id", videoId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/videos");
+}
+
 export async function updateVideoTags(
   videoId: string,
   tags: string[]

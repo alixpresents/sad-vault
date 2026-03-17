@@ -8,7 +8,7 @@ import {
   Link2, CheckSquare, Square, Film, Sparkles, Plus,
 } from "lucide-react";
 import type { Video } from "@/lib/types";
-import { deleteVideo, updateVideoTitle, replaceVideo, updateVideoTags } from "@/app/(admin)/uploads/actions";
+import { deleteVideo, updateVideoTitle, replaceVideo, updateVideoTags, removeVideoTag } from "@/app/(admin)/uploads/actions";
 import { seekAndCapture, uploadThumbnail } from "@/lib/thumbnail";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
@@ -186,6 +186,11 @@ export function VideosGallery({
     router.refresh();
   }
 
+  async function handleRemoveTag(videoId: string, tag: string) {
+    await removeVideoTag(videoId, tag);
+    router.refresh();
+  }
+
   // Keyboard nav for modal
   useEffect(() => {
     if (modalIndex === null) return;
@@ -270,6 +275,7 @@ export function VideosGallery({
                 onDelete={() => setDeleteId(video.id)}
                 onAnalyze={() => handleAnalyze(video.id)}
                 onTagClick={(tag) => setTagFilter(tag)}
+                onRemoveTag={(tag) => handleRemoveTag(video.id, tag)}
               />
             ))}
           </div>
@@ -343,10 +349,10 @@ export function VideosGallery({
 // ─── Grid card ──────────────────────────────────────────────────
 
 function VideoGridCard({
-  video, stats, isSelected, isAnalyzing, onSelect, onPlay, onDelete, onAnalyze, onTagClick,
+  video, stats, isSelected, isAnalyzing, onSelect, onPlay, onDelete, onAnalyze, onTagClick, onRemoveTag,
 }: {
   video: VideoWithTalent; stats?: VideoStats; isSelected: boolean; isAnalyzing: boolean;
-  onSelect: () => void; onPlay: () => void; onDelete: () => void; onAnalyze: () => void; onTagClick: (tag: string) => void;
+  onSelect: () => void; onPlay: () => void; onDelete: () => void; onAnalyze: () => void; onTagClick: (tag: string) => void; onRemoveTag: (tag: string) => void;
 }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
@@ -405,9 +411,12 @@ function VideoGridCard({
         {(video.tags ?? []).length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {video.tags.map((tag) => (
-              <button key={tag} onClick={() => onTagClick(tag)} className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700">
-                {tag}
-              </button>
+              <span key={tag} className="group/tag inline-flex items-center gap-0.5 rounded-full bg-neutral-100 py-0.5 pl-2 pr-1 text-[10px] font-medium text-neutral-500 transition-colors hover:bg-neutral-200">
+                <button onClick={() => onTagClick(tag)} className="hover:text-neutral-700">{tag}</button>
+                <button onClick={(e) => { e.stopPropagation(); onRemoveTag(tag); }} className="rounded-full p-0.5 text-neutral-300 opacity-0 transition-all hover:bg-neutral-300 hover:text-white group-hover/tag:opacity-100">
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
             ))}
           </div>
         )}

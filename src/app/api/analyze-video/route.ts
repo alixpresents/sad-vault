@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
             },
             {
               type: "text",
-              text: `Analyse cette image extraite d'une video de production audiovisuelle. Genere exactement 4 tags courts (1-2 mots chacun) qui decrivent : le type de contenu (fashion, beauty, sport, musique, food, lifestyle...), l'ambiance/mood (cinematique, lumineux, sombre, colore, minimaliste...), le setting (studio, exterieur, urbain, nature...), et un tag libre pertinent. Reponds uniquement en JSON : {"tags": ["tag1", "tag2", "tag3", "tag4"]}. Tags en francais, lowercase.`,
+              text: `Analyze this frame from a professional video production. Generate exactly 4 short tags (1-2 words each) describing: content type (fashion, beauty, sport, music, food, lifestyle...), mood/atmosphere (cinematic, bright, dark, colorful, minimalist...), setting (studio, outdoor, urban, nature...), and one relevant free tag. Reply only in JSON: {"tags": ["tag1", "tag2", "tag3", "tag4"]}. Tags in English, lowercase.`,
             },
           ],
         },
