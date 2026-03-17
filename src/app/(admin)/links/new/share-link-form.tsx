@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -64,6 +65,7 @@ export function ShareLinkForm({
     new Set()
   );
   const [expiration, setExpiration] = useState("none");
+  const [allowDownload, setAllowDownload] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -114,6 +116,7 @@ export function ShareLinkForm({
       talent_id: talentId === "all" ? null : talentId,
       video_ids: Array.from(selectedVideoIds),
       expires_at: getExpirationDate(expiration),
+      allow_download: allowDownload,
     });
 
     if (result?.error) {
@@ -222,6 +225,21 @@ export function ShareLinkForm({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Download toggle */}
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div>
+          <Label htmlFor="allow-download">Autoriser le telechargement</Label>
+          <p className="text-xs text-muted-foreground">
+            Permet au destinataire de telecharger les videos.
+          </p>
+        </div>
+        <Switch
+          id="allow-download"
+          checked={allowDownload}
+          onCheckedChange={setAllowDownload}
+        />
       </div>
 
       {/* Error */}

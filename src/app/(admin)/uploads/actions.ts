@@ -42,6 +42,29 @@ export async function deleteVideo(id: string, talentId: string) {
   revalidatePath(`/talents/${talentId}`);
 }
 
+export async function updateVideoTitle(
+  videoId: string,
+  talentId: string,
+  title: string
+) {
+  const supabase = await createServerClient();
+
+  if (!title.trim()) {
+    return { error: "Le titre ne peut pas etre vide" };
+  }
+
+  const { error } = await supabase
+    .from("videos")
+    .update({ title: title.trim() })
+    .eq("id", videoId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/talents/${talentId}`);
+}
+
 export async function updateVideoThumbnail(
   videoId: string,
   talentId: string,

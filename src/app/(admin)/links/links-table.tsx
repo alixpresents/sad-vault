@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Trash2, ExternalLink, Check } from "lucide-react";
+import Link from "next/link";
+import { Copy, Trash2, ExternalLink, Check, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -135,6 +136,11 @@ export function LinksTable({
                         ) : (
                           <Copy />
                         )}
+                      </Button>
+                      <Button variant="ghost" size="icon-xs" asChild>
+                        <Link href={`/links/${link.id}/edit`}>
+                          <Pencil />
+                        </Link>
                       </Button>
                       <Button variant="ghost" size="icon-xs" asChild>
                         <a

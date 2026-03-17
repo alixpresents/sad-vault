@@ -20,6 +20,7 @@ export async function createShareLink(data: {
   talent_id: string | null;
   video_ids: string[];
   expires_at: string | null;
+  allow_download: boolean;
 }) {
   const supabase = await createServerClient();
 
@@ -43,6 +44,7 @@ export async function createShareLink(data: {
     talent_id: data.talent_id,
     video_ids: data.video_ids,
     expires_at: data.expires_at,
+    allow_download: data.allow_download,
     created_by: user.id,
   });
 
@@ -51,6 +53,40 @@ export async function createShareLink(data: {
   }
 
   revalidatePath("/links");
+  redirect("/links");
+}
+
+export async function updateShareLink(
+  id: string,
+  data: {
+    title: string | null;
+    video_ids: string[];
+    expires_at: string | null;
+    allow_download: boolean;
+  }
+) {
+  const supabase = await createServerClient();
+
+  if (data.video_ids.length === 0) {
+    return { error: "Le lien doit contenir au moins une video" };
+  }
+
+  const { error } = await supabase
+    .from("share_links")
+    .update({
+      title: data.title,
+      video_ids: data.video_ids,
+      expires_at: data.expires_at,
+      allow_download: data.allow_download,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/links");
+  revalidatePath(`/links/${id}/edit`);
   redirect("/links");
 }
 

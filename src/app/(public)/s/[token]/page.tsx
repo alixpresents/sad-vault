@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createServiceClient } from "@/lib/supabase-service";
 import type { Video, ShareLink, Talent } from "@/lib/types";
-import { SharePlayer } from "./share-player";
+import { ShareView } from "./share-view";
 
 export async function generateMetadata({
   params,
@@ -89,50 +89,12 @@ export default async function SharePage({
     .then();
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <header className="border-b border-white/[0.06] px-4 py-5 sm:px-8">
-        <div className="mx-auto max-w-4xl">
-          <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">
-            Sad Pictures
-          </p>
-          {(shareLink.title || talentName) && (
-            <h1 className="mt-2 text-lg font-semibold tracking-tight sm:text-xl">
-              {shareLink.title ?? talentName}
-            </h1>
-          )}
-          {shareLink.title && talentName && (
-            <p className="mt-0.5 text-sm text-white/40">{talentName}</p>
-          )}
-        </div>
-      </header>
-
-      {/* Videos */}
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
-        {orderedVideos.length === 0 ? (
-          <p className="text-center text-sm text-white/40">
-            Aucune video disponible.
-          </p>
-        ) : (
-          <div className="space-y-10">
-            {orderedVideos.map((video, index) => (
-              <SharePlayer
-                key={video.id}
-                video={video}
-                token={token}
-                autoLoadFirst={index === 0}
-              />
-            ))}
-          </div>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-white/[0.06] px-4 py-5 text-center sm:px-8">
-        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/20">
-          Sad Pictures / RZRE
-        </p>
-      </footer>
-    </div>
+    <ShareView
+      videos={orderedVideos}
+      token={token}
+      title={shareLink.title}
+      talentName={talentName}
+      allowDownload={shareLink.allow_download}
+    />
   );
 }

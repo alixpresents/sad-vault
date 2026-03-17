@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Trash2, Play, Loader2, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Video } from "@/lib/types";
-import { deleteVideo } from "@/app/(admin)/uploads/actions";
+import { deleteVideo, updateVideoTitle } from "@/app/(admin)/uploads/actions";
 import { ThumbnailPicker } from "./thumbnail-picker";
 
 function formatDuration(seconds: number | null) {
@@ -30,6 +30,78 @@ function formatBytes(bytes: number | null) {
   const sizes = ["o", "Ko", "Mo", "Go"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+function InlineTitle({
+  videoId,
+  talentId,
+  initialTitle,
+}: {
+  videoId: string;
+  talentId: string;
+  initialTitle: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(initialTitle);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  async function save() {
+    const trimmed = title.trim();
+    if (!trimmed || trimmed === initialTitle) {
+      setTitle(initialTitle);
+      setEditing(false);
+      return;
+    }
+
+    setSaving(true);
+    await updateVideoTitle(videoId, talentId, trimmed);
+    setSaving(false);
+    setEditing(false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      save();
+    }
+    if (e.key === "Escape") {
+      setTitle(initialTitle);
+      setEditing(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={save}
+        onKeyDown={handleKeyDown}
+        disabled={saving}
+        className="w-full truncate rounded border border-input bg-transparent px-1 py-0 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="w-full truncate text-left text-sm font-medium hover:underline"
+      title="Cliquer pour renommer"
+    >
+      {initialTitle}
+    </button>
+  );
 }
 
 export function VideoCard({
@@ -147,8 +219,12 @@ export function VideoCard({
 
         {/* Info */}
         <div className="flex items-start justify-between gap-2 p-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{video.title}</p>
+          <div className="min-w-0 flex-1">
+            <InlineTitle
+              videoId={video.id}
+              talentId={video.talent_id}
+              initialTitle={video.title}
+            />
             <p className="text-xs text-muted-foreground">
               {formatBytes(video.file_size_bytes)}
             </p>
