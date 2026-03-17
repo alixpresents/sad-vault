@@ -21,6 +21,7 @@ export type Video = {
 export type ShareLink = {
   id: string;
   token: string;
+  custom_slug: string | null;
   title: string | null;
   talent_id: string | null;
   video_ids: string[];

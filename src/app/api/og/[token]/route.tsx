@@ -24,19 +24,31 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { token } = await params;
+  const { token: param } = await params;
 
-  if (!/^[a-z0-9]+$/.test(token) || token.length < 12) {
-    return new Response("Invalid token", { status: 400 });
+  if (!param || param.length < 3) {
+    return new Response("Invalid param", { status: 400 });
   }
 
   const supabase = createServiceClient();
 
-  const { data: link } = await supabase
+  // Try custom_slug first, then token
+  let link;
+  const { data: bySlug } = await supabase
     .from("share_links")
     .select("*")
-    .eq("token", token)
+    .eq("custom_slug", param)
     .single();
+  if (bySlug) {
+    link = bySlug;
+  } else {
+    const { data: byToken } = await supabase
+      .from("share_links")
+      .select("*")
+      .eq("token", param)
+      .single();
+    link = byToken;
+  }
 
   if (!link) {
     return new Response("Not found", { status: 404 });

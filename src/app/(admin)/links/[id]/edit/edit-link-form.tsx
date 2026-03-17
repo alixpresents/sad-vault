@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { GripVertical, X, Plus } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
@@ -12,6 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Switch } from "@/components/ui/switch";
 import type { ShareLink, Video, Talent } from "@/lib/types";
 import { updateShareLink } from "../../actions";
+import { SlugField } from "../../slug-field";
 
 const EXPIRATION_OPTIONS = [
   { label: "Pas d'expiration", value: "none" },
@@ -62,6 +63,7 @@ function SortableVideoItem({ video, onRemove }: { video: Video; onRemove: () => 
 
 export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; allVideos: Video[]; talents: Talent[] }) {
   const [title, setTitle] = useState(link.title ?? "");
+  const [customSlug, setCustomSlug] = useState(link.custom_slug ?? "");
   const [videoIds, setVideoIds] = useState<string[]>(link.video_ids);
   const [expiration, setExpiration] = useState("none");
   const [allowDownload, setAllowDownload] = useState(link.allow_download);
@@ -69,6 +71,8 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
   const [submitting, setSubmitting] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [addFilter, setAddFilter] = useState("all");
+
+  const handleSlugChange = useCallback((slug: string) => setCustomSlug(slug), []);
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const videoMap = useMemo(() => { const m = new Map<string, Video>(); allVideos.forEach((v) => m.set(v.id, v)); return m; }, [allVideos]);
@@ -89,7 +93,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
   async function handleSubmit() {
     if (videoIds.length === 0) { setError("Le lien doit contenir au moins une video."); return; }
     setError(null); setSubmitting(true);
-    const result = await updateShareLink(link.id, { title: title || null, video_ids: videoIds, expires_at: getExpirationDate(expiration), allow_download: allowDownload });
+    const result = await updateShareLink(link.id, { title: title || null, custom_slug: customSlug || null, video_ids: videoIds, expires_at: getExpirationDate(expiration), allow_download: allowDownload });
     if (result?.error) { setError(result.error); setSubmitting(false); }
   }
 
@@ -102,6 +106,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
         <label className={labelCls}>Titre (optionnel)</label>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Reel showroom Mars 2026" className={inputCls} />
       </div>
+      <SlugField value={customSlug} onChange={handleSlugChange} title={title} excludeLinkId={link.id} />
       <div className="mb-5">
         <div className="mb-1.5 flex items-center justify-between">
           <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Videos ({videoIds.length})</label>

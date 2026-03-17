@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Switch } from "@/components/ui/switch";
 import type { Talent, Video } from "@/lib/types";
 import { createShareLink } from "../actions";
+import { SlugField } from "../slug-field";
 
 const EXPIRATION_OPTIONS = [
   { label: "Pas d'expiration", value: "none" },
@@ -32,6 +33,7 @@ function formatDuration(s: number | null) {
 
 export function ShareLinkForm({ talents, videos }: { talents: Talent[]; videos: Video[] }) {
   const [title, setTitle] = useState("");
+  const [customSlug, setCustomSlug] = useState("");
   const [talentId, setTalentId] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expiration, setExpiration] = useState("none");
@@ -45,10 +47,19 @@ export function ShareLinkForm({ talents, videos }: { talents: Talent[]; videos: 
   function toggle(id: string) { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
   function toggleAll() { setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map((v) => v.id))); }
 
+  const handleSlugChange = useCallback((slug: string) => setCustomSlug(slug), []);
+
   async function handleSubmit() {
     if (selected.size === 0) { setError("Selectionnez au moins une video."); return; }
     setError(null); setSubmitting(true);
-    const result = await createShareLink({ title: title || null, talent_id: talentId === "all" ? null : talentId, video_ids: Array.from(selected), expires_at: getExpirationDate(expiration), allow_download: allowDownload });
+    const result = await createShareLink({
+      title: title || null,
+      custom_slug: customSlug || null,
+      talent_id: talentId === "all" ? null : talentId,
+      video_ids: Array.from(selected),
+      expires_at: getExpirationDate(expiration),
+      allow_download: allowDownload,
+    });
     if (result?.error) { setError(result.error); setSubmitting(false); }
   }
 
@@ -61,6 +72,7 @@ export function ShareLinkForm({ talents, videos }: { talents: Talent[]; videos: 
         <label className={labelCls}>Titre (optionnel)</label>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Reel showroom Mars 2026" className={inputCls} />
       </div>
+      <SlugField value={customSlug} onChange={handleSlugChange} title={title} />
       <div className="mb-5">
         <label className={labelCls}>Filtrer par talent</label>
         <select value={talentId} onChange={(e) => { setTalentId(e.target.value); setSelected(new Set()); }} className={`${inputCls} cursor-pointer`}>

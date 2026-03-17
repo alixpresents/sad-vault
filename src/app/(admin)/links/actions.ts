@@ -25,8 +25,16 @@ function generateToken() {
   return token;
 }
 
+const slugSchema = z
+  .string()
+  .min(3, "Le slug doit faire au moins 3 caracteres")
+  .max(50, "Le slug doit faire au plus 50 caracteres")
+  .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, "Uniquement lettres minuscules, chiffres et tirets (pas au debut/fin)")
+  .nullable();
+
 const shareLinkSchema = z.object({
   title: z.string().max(500).nullable(),
+  custom_slug: slugSchema,
   talent_id: z.string().uuid().nullable(),
   video_ids: z.array(z.string().uuid()).min(1, "Selectionnez au moins une video"),
   expires_at: z.string().datetime().nullable(),
@@ -35,6 +43,7 @@ const shareLinkSchema = z.object({
 
 export async function createShareLink(data: {
   title: string | null;
+  custom_slug: string | null;
   talent_id: string | null;
   video_ids: string[];
   expires_at: string | null;
@@ -51,6 +60,7 @@ export async function createShareLink(data: {
 
   const { error } = await supabase.from("share_links").insert({
     token,
+    custom_slug: parsed.data.custom_slug || null,
     title: parsed.data.title,
     talent_id: parsed.data.talent_id,
     video_ids: parsed.data.video_ids,
@@ -60,6 +70,9 @@ export async function createShareLink(data: {
   });
 
   if (error) {
+    if (error.code === "23505" && error.message.includes("custom_slug")) {
+      return { error: "Ce slug est deja utilise" };
+    }
     return { error: error.message };
   }
 
@@ -69,6 +82,7 @@ export async function createShareLink(data: {
 
 const updateShareLinkSchema = z.object({
   title: z.string().max(500).nullable(),
+  custom_slug: slugSchema,
   video_ids: z.array(z.string().uuid()).min(1, "Le lien doit contenir au moins une video"),
   expires_at: z.string().datetime().nullable(),
   allow_download: z.boolean(),
@@ -78,6 +92,7 @@ export async function updateShareLink(
   id: string,
   data: {
     title: string | null;
+    custom_slug: string | null;
     video_ids: string[];
     expires_at: string | null;
     allow_download: boolean;
@@ -98,6 +113,7 @@ export async function updateShareLink(
     .from("share_links")
     .update({
       title: parsed.data.title,
+      custom_slug: parsed.data.custom_slug || null,
       video_ids: parsed.data.video_ids,
       expires_at: parsed.data.expires_at,
       allow_download: parsed.data.allow_download,
@@ -105,6 +121,9 @@ export async function updateShareLink(
     .eq("id", id);
 
   if (error) {
+    if (error.code === "23505" && error.message.includes("custom_slug")) {
+      return { error: "Ce slug est deja utilise" };
+    }
     return { error: error.message };
   }
 
@@ -127,4 +146,25 @@ export async function deleteShareLink(id: string) {
   }
 
   revalidatePath("/links");
+}
+
+/** Check if a custom_slug is available (for real-time validation) */
+export async function checkSlugAvailability(
+  slug: string,
+  excludeLinkId?: string
+): Promise<{ available: boolean }> {
+  const { supabase } = await requireAuth();
+
+  let query = supabase
+    .from("share_links")
+    .select("id")
+    .eq("custom_slug", slug)
+    .limit(1);
+
+  if (excludeLinkId) {
+    query = query.neq("id", excludeLinkId);
+  }
+
+  const { data } = await query;
+  return { available: !data || data.length === 0 };
 }

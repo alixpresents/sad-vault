@@ -1,8 +1,29 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createServiceClient } from "@/lib/supabase-service";
 import type { Video, ShareLink, Talent } from "@/lib/types";
 import { ShareView } from "./share-view";
+
+/** Find a share link by custom_slug first, then by token */
+async function findLink(supabase: ReturnType<typeof createServiceClient>, param: string) {
+  // Try custom_slug first
+  const { data: bySlug } = await supabase
+    .from("share_links")
+    .select("*")
+    .eq("custom_slug", param)
+    .single();
+  if (bySlug) return bySlug as ShareLink;
+
+  // Fall back to token
+  const { data: byToken } = await supabase
+    .from("share_links")
+    .select("*")
+    .eq("token", param)
+    .single();
+  if (byToken) return byToken as ShareLink;
+
+  return null;
+}
 
 export async function generateMetadata({
   params,
@@ -11,28 +32,21 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { token } = await params;
   const supabase = createServiceClient();
-
-  const { data: link } = await supabase
-    .from("share_links")
-    .select("title, talent_id, video_ids")
-    .eq("token", token)
-    .single();
+  const link = await findLink(supabase, token);
 
   if (!link) {
     return { title: "Lien introuvable" };
   }
 
-  const shareLink = link as { title: string | null; talent_id: string | null; video_ids: string[] };
-  const title = shareLink.title || "Reel";
-  const videoCount = shareLink.video_ids?.length ?? 0;
+  const title = link.title || "Reel";
+  const videoCount = link.video_ids?.length ?? 0;
 
-  // Fetch talent name for description
   let talentName: string | null = null;
-  if (shareLink.talent_id) {
+  if (link.talent_id) {
     const { data: talent } = await supabase
       .from("talents")
       .select("name")
-      .eq("id", shareLink.talent_id)
+      .eq("id", link.talent_id)
       .single();
     if (talent) talentName = (talent as Talent).name;
   }
@@ -42,7 +56,9 @@ export async function generateMetadata({
     : `${videoCount} video${videoCount !== 1 ? "s" : ""}`;
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://reel.sad-pictures.com";
-  const ogImageUrl = `${baseUrl}/api/og/${token}`;
+  // Use custom_slug for OG if available, otherwise token
+  const ogParam = link.custom_slug || link.token;
+  const ogImageUrl = `${baseUrl}/api/og/${ogParam}`;
 
   return {
     title,
@@ -80,21 +96,19 @@ export default async function SharePage({
 }: {
   params: Promise<{ token: string }>;
 }) {
-  const { token } = await params;
+  const { token: param } = await params;
   const supabase = createServiceClient();
-
-  const { data: link } = await supabase
-    .from("share_links")
-    .select("*")
-    .eq("token", token)
-    .single();
+  const link = await findLink(supabase, param);
 
   if (!link) notFound();
 
-  const shareLink = link as ShareLink;
+  // If accessed via token but has a custom_slug, redirect to the pretty URL
+  if (link.custom_slug && param === link.token) {
+    redirect(`/s/${link.custom_slug}`);
+  }
 
   // Check expiration
-  if (shareLink.expires_at && new Date(shareLink.expires_at) < new Date()) {
+  if (link.expires_at && new Date(link.expires_at) < new Date()) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
         <div className="flex flex-col items-center text-center">
@@ -115,39 +129,37 @@ export default async function SharePage({
   const { data: videos } = await supabase
     .from("videos")
     .select("*")
-    .in("id", shareLink.video_ids);
+    .in("id", link.video_ids);
 
-  // Sort videos in the order of video_ids
-  const orderedVideos = shareLink.video_ids
+  const orderedVideos = link.video_ids
     .map((id) => (videos as Video[])?.find((v) => v.id === id))
     .filter(Boolean) as Video[];
 
-  // Fetch talent name if linked
   let talentName: string | null = null;
-  if (shareLink.talent_id) {
+  if (link.talent_id) {
     const { data: talent } = await supabase
       .from("talents")
       .select("name")
-      .eq("id", shareLink.talent_id)
+      .eq("id", link.talent_id)
       .single();
     if (talent) talentName = (talent as Talent).name;
   }
 
-  // Increment view count (fire and forget)
+  // Increment view count
   supabase
     .from("share_links")
-    .update({ view_count: shareLink.view_count + 1 })
-    .eq("id", shareLink.id)
+    .update({ view_count: link.view_count + 1 })
+    .eq("id", link.id)
     .then();
 
   return (
     <ShareView
       videos={orderedVideos}
-      token={token}
-      shareLinkId={shareLink.id}
-      title={shareLink.title}
+      token={link.token}
+      shareLinkId={link.id}
+      title={link.title}
       talentName={talentName}
-      allowDownload={shareLink.allow_download}
+      allowDownload={link.allow_download}
     />
   );
 }
