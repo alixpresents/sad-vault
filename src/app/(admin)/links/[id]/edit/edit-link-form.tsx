@@ -9,6 +9,7 @@ import {
   arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Switch } from "@/components/ui/switch";
 import type { ShareLink, Video, Talent } from "@/lib/types";
 import { updateShareLink } from "../../actions";
 
@@ -138,9 +139,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
           <p className="text-[12px] font-medium text-neutral-700">Autoriser le telechargement</p>
           <p className="text-[11px] text-neutral-400">Permet au destinataire de telecharger les videos.</p>
         </div>
-        <button onClick={() => setAllowDownload(!allowDownload)} className={`relative h-5 w-9 rounded-full transition-colors ${allowDownload ? "bg-neutral-900" : "bg-neutral-200"}`}>
-          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${allowDownload ? "translate-x-4" : "translate-x-0.5"}`} />
-        </button>
+        <Switch checked={allowDownload} onCheckedChange={setAllowDownload} />
       </div>
       {error && <p className="mb-4 text-[12px] text-red-600">{error}</p>}
       <button onClick={handleSubmit} disabled={submitting} className="rounded-md bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50">
