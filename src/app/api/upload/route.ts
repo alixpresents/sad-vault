@@ -4,6 +4,9 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServerClient } from "@/lib/supabase-server";
 
+const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
+const ALLOWED_THUMBNAIL_TYPES = ["image/jpeg"];
+
 export async function POST(request: NextRequest) {
   const supabase = await createServerClient();
   const {
@@ -24,13 +27,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Validate talentSlug format
+  if (!/^[a-z0-9-]+$/.test(talentSlug)) {
+    return NextResponse.json(
+      { error: "talentSlug invalide" },
+      { status: 400 }
+    );
+  }
+
+  // Validate content type server-side
+  const allowedTypes = type === "thumbnail" ? ALLOWED_THUMBNAIL_TYPES : ALLOWED_VIDEO_TYPES;
+  if (!allowedTypes.includes(contentType)) {
+    return NextResponse.json(
+      { error: `Type de fichier non autorise: ${contentType}` },
+      { status: 400 }
+    );
+  }
+
   const uuid = crypto.randomUUID();
   let r2Key: string;
 
   if (type === "thumbnail") {
     r2Key = `thumbnails/${talentSlug}/${uuid}.jpg`;
   } else {
-    const ext = filename.split(".").pop();
+    const ext = filename.split(".").pop()?.toLowerCase();
+    if (!ext || !["mp4", "mov", "webm"].includes(ext)) {
+      return NextResponse.json(
+        { error: "Extension de fichier non autorisee" },
+        { status: 400 }
+      );
+    }
     r2Key = `videos/${talentSlug}/${uuid}.${ext}`;
   }
 
@@ -40,7 +66,8 @@ export async function POST(request: NextRequest) {
     ContentType: contentType,
   });
 
-  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
+  // 5 min expiry for upload URLs
+  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 300 });
 
   return NextResponse.json({ presignedUrl, r2Key });
 }

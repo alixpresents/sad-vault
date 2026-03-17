@@ -4,8 +4,39 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServerClient } from "@/lib/supabase-server";
 
+// Simple in-memory rate limiter (per serverless instance)
+const rateMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 30; // max requests
+const RATE_WINDOW = 60_000; // per minute
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    rateMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return false;
+  }
+
+  entry.count++;
+  return entry.count > RATE_LIMIT;
+}
+
 // Public endpoint — generates presigned GET URLs for videos/thumbnails in a valid share link
 export async function GET(request: NextRequest) {
+  // Rate limiting
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown";
+
+  if (isRateLimited(ip)) {
+    return NextResponse.json(
+      { error: "Trop de requetes. Reessayez dans un instant." },
+      { status: 429 }
+    );
+  }
+
   const token = request.nextUrl.searchParams.get("token");
   const r2Key = request.nextUrl.searchParams.get("key");
 
@@ -14,6 +45,11 @@ export async function GET(request: NextRequest) {
       { error: "token et key sont requis" },
       { status: 400 }
     );
+  }
+
+  // Validate token format (alphanumeric, 16 chars)
+  if (!/^[a-z0-9]+$/.test(token) || token.length < 12) {
+    return NextResponse.json({ error: "Token invalide" }, { status: 400 });
   }
 
   const supabase = await createServerClient();
@@ -53,11 +89,11 @@ export async function GET(request: NextRequest) {
     Key: r2Key,
   });
 
-  // 1h expiry for presigned URLs
-  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
+  // 15 min expiry for presigned URLs
+  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 900 });
 
   // Cache thumbnail URLs longer (they rarely change), video URLs shorter
-  const cacheMaxAge = isThumbnail ? 1800 : 300;
+  const cacheMaxAge = isThumbnail ? 600 : 120;
 
   return NextResponse.json(
     { presignedUrl },

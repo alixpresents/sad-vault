@@ -26,13 +26,14 @@ export async function GET(request: NextRequest) {
     Key: r2Key,
   });
 
-  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
+  // 15 min expiry
+  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 900 });
 
   return NextResponse.json(
     { presignedUrl },
     {
       headers: {
-        "Cache-Control": "private, max-age=600",
+        "Cache-Control": "private, max-age=300",
       },
     }
   );
