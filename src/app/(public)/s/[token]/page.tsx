@@ -44,10 +44,9 @@ export default async function SharePage({
   if (shareLink.expires_at && new Date(shareLink.expires_at) < new Date()) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-        <div className="text-center">
-          <p className="text-xs uppercase tracking-widest text-white/40">
-            Sad Pictures
-          </p>
+        <div className="flex flex-col items-center text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-sad-pictures.png" alt="Sad Pictures" className="h-8 w-auto opacity-70" />
           <h1 className="mt-3 text-xl font-semibold tracking-tight">
             Ce lien a expire
           </h1>

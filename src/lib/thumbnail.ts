@@ -1,19 +1,34 @@
 // Client-side thumbnail generation from video via canvas
 
+const THUMB_MAX_W = 480;
+const THUMB_MAX_H = 270;
+
 export function captureVideoFrame(
   video: HTMLVideoElement,
   quality = 0.85
 ): Promise<Blob | null> {
   return new Promise((resolve) => {
+    const srcW = video.videoWidth;
+    const srcH = video.videoHeight;
+    if (!srcW || !srcH) {
+      resolve(null);
+      return;
+    }
+
+    // Downscale to max 480x270 preserving aspect ratio
+    const scale = Math.min(1, THUMB_MAX_W / srcW, THUMB_MAX_H / srcH);
+    const w = Math.round(srcW * scale);
+    const h = Math.round(srcH * scale);
+
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       resolve(null);
       return;
     }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, w, h);
     canvas.toBlob(
       (blob) => resolve(blob),
       "image/jpeg",

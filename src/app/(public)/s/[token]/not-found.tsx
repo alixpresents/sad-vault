@@ -1,10 +1,9 @@
 export default function ShareNotFound() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-      <div className="text-center">
-        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">
-          Sad Pictures
-        </p>
+      <div className="flex flex-col items-center text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-sad-pictures.png" alt="Sad Pictures" className="h-8 w-auto opacity-70" />
         <h1 className="mt-3 text-xl font-semibold tracking-tight">
           Lien introuvable
         </h1>

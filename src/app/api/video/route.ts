@@ -4,7 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServerClient } from "@/lib/supabase-server";
 
-// Generate a short-lived presigned GET URL for video playback
+// Generate a presigned GET URL for admin video/thumbnail playback
 export async function GET(request: NextRequest) {
   const r2Key = request.nextUrl.searchParams.get("key");
 
@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "key est requis" }, { status: 400 });
   }
 
-  // Check auth for admin video access
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -27,7 +26,14 @@ export async function GET(request: NextRequest) {
     Key: r2Key,
   });
 
-  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 900 });
+  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
 
-  return NextResponse.json({ presignedUrl });
+  return NextResponse.json(
+    { presignedUrl },
+    {
+      headers: {
+        "Cache-Control": "private, max-age=600",
+      },
+    }
+  );
 }

@@ -1,6 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  memo,
+  createContext,
+  useContext,
+} from "react";
+import Image from "next/image";
 import {
   Play,
   Loader2,
@@ -15,40 +24,63 @@ import type { Video } from "@/lib/types";
 
 type ViewMode = "carousel" | "list";
 
-// Shared helpers
+// ─── Shared URL cache ────────────────────────────────────────────
+// Persists across mode switches so thumbnails/video URLs aren't re-fetched.
 
-function formatDuration(seconds: number | null) {
-  if (!seconds) return "";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+const urlCache = new Map<string, string>();
+
+const TokenContext = createContext<string>("");
+
+function useToken() {
+  return useContext(TokenContext);
 }
 
-function useThumbnailUrl(thumbnailKey: string | null, token: string) {
-  const [url, setUrl] = useState<string | null>(null);
+async function fetchShareUrl(token: string, r2Key: string): Promise<string | null> {
+  const cacheKey = `${token}:${r2Key}`;
+  const cached = urlCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch(
+      `/api/share?token=${encodeURIComponent(token)}&key=${encodeURIComponent(r2Key)}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    urlCache.set(cacheKey, data.presignedUrl);
+    return data.presignedUrl;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Hooks ───────────────────────────────────────────────────────
+
+function useThumbnailUrl(thumbnailKey: string | null) {
+  const token = useToken();
+  const [url, setUrl] = useState<string | null>(
+    thumbnailKey ? urlCache.get(`${token}:${thumbnailKey}`) ?? null : null
+  );
 
   useEffect(() => {
     if (!thumbnailKey) return;
+    const cached = urlCache.get(`${token}:${thumbnailKey}`);
+    if (cached) {
+      setUrl(cached);
+      return;
+    }
+
     let cancelled = false;
-
-    fetch(
-      `/api/share?token=${encodeURIComponent(token)}&key=${encodeURIComponent(thumbnailKey)}`
-    )
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && !cancelled) setUrl(data.presignedUrl);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
+    fetchShareUrl(token, thumbnailKey).then((u) => {
+      if (u && !cancelled) setUrl(u);
+    });
+    return () => { cancelled = true; };
   }, [thumbnailKey, token]);
 
   return url;
 }
 
-function useVideoUrl(token: string) {
+function useVideoLoader() {
+  const token = useToken();
   const [state, setState] = useState<{
     url: string | null;
     loading: boolean;
@@ -57,15 +89,16 @@ function useVideoUrl(token: string) {
 
   const load = useCallback(
     async (r2Key: string) => {
+      const cached = urlCache.get(`${token}:${r2Key}`);
+      if (cached) {
+        setState({ url: cached, loading: false, error: false });
+        return;
+      }
       setState({ url: null, loading: true, error: false });
-      try {
-        const res = await fetch(
-          `/api/share?token=${encodeURIComponent(token)}&key=${encodeURIComponent(r2Key)}`
-        );
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        setState({ url: data.presignedUrl, loading: false, error: false });
-      } catch {
+      const url = await fetchShareUrl(token, r2Key);
+      if (url) {
+        setState({ url, loading: false, error: false });
+      } else {
         setState({ url: null, loading: false, error: true });
       }
     },
@@ -77,6 +110,39 @@ function useVideoUrl(token: string) {
   }, []);
 
   return { ...state, load, reset };
+}
+
+function useInView(rootMargin = "200px") {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [rootMargin]);
+
+  return { ref, inView };
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+function formatDuration(seconds: number | null) {
+  if (!seconds) return "";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 // ─── Main component ──────────────────────────────────────────────
@@ -105,75 +171,81 @@ export function ShareView({
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <header className="border-b border-white/[0.06] px-4 py-5 sm:px-8">
-        <div className="mx-auto flex max-w-5xl items-start justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">
-              Sad Pictures
-            </p>
-            {(title || talentName) && (
-              <h1 className="mt-2 truncate text-lg font-semibold tracking-tight sm:text-xl">
-                {title ?? talentName}
-              </h1>
-            )}
-            {title && talentName && (
-              <p className="mt-0.5 text-sm text-white/40">{talentName}</p>
-            )}
+    <TokenContext value={token}>
+      <div className="min-h-screen bg-black text-white">
+        {/* Header */}
+        <header className="border-b border-white/[0.06] px-4 py-5 sm:px-8">
+          <div className="mx-auto flex max-w-5xl items-start justify-between">
+            <div className="min-w-0">
+              <Image
+                src="/logo-sad-pictures.png"
+                alt="Sad Pictures"
+                width={160}
+                height={32}
+                className="h-8 w-auto opacity-70"
+                priority
+              />
+              {(title || talentName) && (
+                <h1 className="mt-2 truncate text-lg font-semibold tracking-tight sm:text-xl">
+                  {title ?? talentName}
+                </h1>
+              )}
+              {title && talentName && (
+                <p className="mt-0.5 text-sm text-white/40">{talentName}</p>
+              )}
+            </div>
+
+            {/* View mode toggle */}
+            <div className="ml-4 flex shrink-0 items-center gap-1 rounded-lg bg-white/[0.06] p-1">
+              <button
+                type="button"
+                onClick={() => setMode("carousel")}
+                className={`rounded-md p-1.5 transition-colors ${
+                  mode === "carousel"
+                    ? "bg-white/15 text-white"
+                    : "text-white/40 hover:text-white/70"
+                }`}
+                title="Carrousel"
+              >
+                <LayoutGrid className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("list")}
+                className={`rounded-md p-1.5 transition-colors ${
+                  mode === "list"
+                    ? "bg-white/15 text-white"
+                    : "text-white/40 hover:text-white/70"
+                }`}
+                title="Liste"
+              >
+                <List className="size-4" />
+              </button>
+            </div>
           </div>
+        </header>
 
-          {/* View mode toggle */}
-          <div className="ml-4 flex shrink-0 items-center gap-1 rounded-lg bg-white/[0.06] p-1">
-            <button
-              type="button"
-              onClick={() => setMode("carousel")}
-              className={`rounded-md p-1.5 transition-colors ${
-                mode === "carousel"
-                  ? "bg-white/15 text-white"
-                  : "text-white/40 hover:text-white/70"
-              }`}
-              title="Carrousel"
-            >
-              <LayoutGrid className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("list")}
-              className={`rounded-md p-1.5 transition-colors ${
-                mode === "list"
-                  ? "bg-white/15 text-white"
-                  : "text-white/40 hover:text-white/70"
-              }`}
-              title="Liste"
-            >
-              <List className="size-4" />
-            </button>
-          </div>
-        </div>
-      </header>
+        {/* Content */}
+        <main className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-10">
+          {mode === "carousel" ? (
+            <CarouselView
+              videos={videos}
+              talentName={talentName}
+              allowDownload={allowDownload}
+            />
+          ) : (
+            <ListView videos={videos} allowDownload={allowDownload} />
+          )}
+        </main>
 
-      {/* Content */}
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-10">
-        {mode === "carousel" ? (
-          <CarouselView
-            videos={videos}
-            token={token}
-            talentName={talentName}
-            allowDownload={allowDownload}
-          />
-        ) : (
-          <ListView videos={videos} token={token} allowDownload={allowDownload} />
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-white/[0.06] px-4 py-5 text-center sm:px-8">
-        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/20">
-          Sad Pictures / RZRE
-        </p>
-      </footer>
-    </div>
+        {/* Footer */}
+        <footer className="border-t border-white/[0.06] px-4 py-5 text-center sm:px-8">
+          <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/20">
+            Sad Pictures
+          </p>
+        </footer>
+      </div>
+    </TokenContext>
   );
 }
 
@@ -194,39 +266,37 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
 
 function CarouselView({
   videos,
-  token,
   talentName,
   allowDownload,
 }: {
   videos: Video[];
-  token: string;
   talentName: string | null;
   allowDownload: boolean;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const video = useVideoUrl(token);
+  const video = useVideoLoader();
+  const [playing, setPlaying] = useState(false);
   const activeVideo = videos[activeIndex];
-
-  // Load the first video on mount
-  useEffect(() => {
-    video.load(videos[0].r2_key);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const activeThumbnailUrl = useThumbnailUrl(activeVideo.thumbnail_key);
 
   function selectVideo(index: number) {
     if (index === activeIndex) return;
     setActiveIndex(index);
+    setPlaying(false);
     video.reset();
-    video.load(videos[index].r2_key);
+  }
+
+  function handlePlay() {
+    setPlaying(true);
+    video.load(activeVideo.r2_key);
   }
 
   function scroll(direction: "left" | "right") {
     const el = scrollRef.current;
     if (!el) return;
-    const amount = 200;
     el.scrollBy({
-      left: direction === "left" ? -amount : amount,
+      left: direction === "left" ? -200 : 200,
       behavior: "smooth",
     });
   }
@@ -245,7 +315,6 @@ function CarouselView({
     <div className="space-y-6">
       {/* Thumbnail strip */}
       <div className="relative">
-        {/* Left arrow */}
         <button
           type="button"
           onClick={() => scroll("left")}
@@ -254,7 +323,6 @@ function CarouselView({
           <ChevronLeft className="size-4" />
         </button>
 
-        {/* Thumbnails */}
         <div
           ref={scrollRef}
           className="scrollbar-hide flex gap-2 overflow-x-auto px-1 py-1 sm:gap-3"
@@ -263,14 +331,13 @@ function CarouselView({
             <ThumbnailChip
               key={v.id}
               video={v}
-              token={token}
               isActive={i === activeIndex}
+              priority={i === 0}
               onClick={() => selectVideo(i)}
             />
           ))}
         </div>
 
-        {/* Right arrow */}
         <button
           type="button"
           onClick={() => scroll("right")}
@@ -280,7 +347,7 @@ function CarouselView({
         </button>
       </div>
 
-      {/* Main player */}
+      {/* Main player — fixed 16:9 aspect ratio */}
       <div className="relative aspect-video overflow-hidden rounded-lg bg-white/[0.03] ring-1 ring-white/[0.06]">
         {video.url ? (
           <video
@@ -289,26 +356,46 @@ function CarouselView({
             controls
             autoPlay
             playsInline
+            preload="metadata"
             {...(!allowDownload && { controlsList: "nodownload", disableRemotePlayback: true })}
             className="h-full w-full"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            {video.loading ? (
-              <Loader2 className="size-8 animate-spin text-white/30" />
-            ) : video.error ? (
-              <button
-                type="button"
-                onClick={() => video.load(activeVideo.r2_key)}
-                className="flex flex-col items-center gap-2"
-              >
-                <RotateCw className="size-6 text-white/40" />
-                <p className="text-xs text-white/40">
-                  Erreur. Cliquer pour reessayer.
-                </p>
-              </button>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            onClick={playing ? () => video.load(activeVideo.r2_key) : handlePlay}
+            disabled={video.loading}
+            className="relative flex h-full w-full items-center justify-center transition-colors hover:bg-white/[0.04]"
+          >
+            {activeThumbnailUrl && (
+              <Image
+                src={activeThumbnailUrl}
+                alt=""
+                fill
+                sizes="(max-width: 1280px) 100vw, 1024px"
+                className="object-cover"
+                priority
+                unoptimized
+              />
+            )}
+
+            <div className="relative z-10">
+              {video.loading ? (
+                <Loader2 className="size-8 animate-spin text-white/30" />
+              ) : video.error ? (
+                <div className="flex flex-col items-center gap-2">
+                  <RotateCw className="size-6 text-white/40" />
+                  <p className="text-xs text-white/40">
+                    Erreur. Cliquer pour reessayer.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex size-14 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition-transform hover:scale-105">
+                  <Play className="ml-0.5 size-5 text-white" />
+                </div>
+              )}
+            </div>
+          </button>
         )}
       </div>
 
@@ -337,20 +424,20 @@ function CarouselView({
   );
 }
 
-// ─── Thumbnail chip ──────────────────────────────────────────────
+// ─── Thumbnail chip (memoized) ───────────────────────────────────
 
-function ThumbnailChip({
+const ThumbnailChip = memo(function ThumbnailChip({
   video,
-  token,
   isActive,
+  priority = false,
   onClick,
 }: {
   video: Video;
-  token: string;
   isActive: boolean;
+  priority?: boolean;
   onClick: () => void;
 }) {
-  const thumbnailUrl = useThumbnailUrl(video.thumbnail_key, token);
+  const thumbnailUrl = useThumbnailUrl(video.thumbnail_key);
 
   return (
     <button
@@ -368,11 +455,15 @@ function ThumbnailChip({
         }`}
       >
         {thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={thumbnailUrl}
             alt=""
+            width={160}
+            height={90}
             className="h-full w-full object-cover"
+            fetchPriority={priority ? "high" : undefined}
+            priority={priority}
+            unoptimized
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
@@ -390,55 +481,56 @@ function ThumbnailChip({
       </span>
     </button>
   );
-}
+});
 
 // ─── List mode ───────────────────────────────────────────────────
 
 function ListView({
   videos,
-  token,
   allowDownload,
 }: {
   videos: Video[];
-  token: string;
   allowDownload: boolean;
 }) {
   return (
     <div className="space-y-10">
       {videos.map((video) => (
-        <ListItem key={video.id} video={video} token={token} allowDownload={allowDownload} />
+        <ListItem key={video.id} video={video} allowDownload={allowDownload} />
       ))}
     </div>
   );
 }
 
-function ListItem({ video, token, allowDownload }: { video: Video; token: string; allowDownload: boolean }) {
-  const thumbnailUrl = useThumbnailUrl(video.thumbnail_key, token);
+const ListItem = memo(function ListItem({
+  video,
+  allowDownload,
+}: {
+  video: Video;
+  allowDownload: boolean;
+}) {
+  const { ref, inView } = useInView("400px");
+  const thumbnailUrl = useThumbnailUrl(inView ? video.thumbnail_key : null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const token = useToken();
 
   async function loadVideo() {
     if (videoUrl || loading) return;
     setLoading(true);
     setError(false);
 
-    try {
-      const res = await fetch(
-        `/api/share?token=${encodeURIComponent(token)}&key=${encodeURIComponent(video.r2_key)}`
-      );
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setVideoUrl(data.presignedUrl);
-    } catch {
+    const url = await fetchShareUrl(token, video.r2_key);
+    if (url) {
+      setVideoUrl(url);
+    } else {
       setError(true);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }
 
   return (
-    <div>
+    <div ref={ref}>
       {/* Title */}
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-white/70">{video.title}</h2>
@@ -449,7 +541,7 @@ function ListItem({ video, token, allowDownload }: { video: Video; token: string
         )}
       </div>
 
-      {/* Player */}
+      {/* Player — fixed 16:9 aspect ratio */}
       <div className="relative aspect-video overflow-hidden rounded-lg bg-white/[0.03] ring-1 ring-white/[0.06]">
         {videoUrl ? (
           <video
@@ -457,6 +549,7 @@ function ListItem({ video, token, allowDownload }: { video: Video; token: string
             controls
             autoPlay
             playsInline
+            preload="none"
             {...(!allowDownload && { controlsList: "nodownload", disableRemotePlayback: true })}
             className="h-full w-full"
           />
@@ -467,13 +560,14 @@ function ListItem({ video, token, allowDownload }: { video: Video; token: string
             disabled={loading}
             className="relative flex h-full w-full items-center justify-center transition-colors hover:bg-white/[0.04]"
           >
-            {/* Thumbnail poster */}
             {thumbnailUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={thumbnailUrl}
                 alt=""
-                className="absolute inset-0 h-full w-full object-cover"
+                fill
+                sizes="(max-width: 1280px) 100vw, 1024px"
+                className="object-cover"
+                unoptimized
               />
             )}
 
@@ -487,11 +581,11 @@ function ListItem({ video, token, allowDownload }: { video: Video; token: string
                     Erreur. Cliquer pour reessayer.
                   </p>
                 </div>
-              ) : (
+              ) : inView ? (
                 <div className="flex size-14 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition-transform hover:scale-105">
                   <Play className="ml-0.5 size-5 text-white" />
                 </div>
-              )}
+              ) : null}
             </div>
           </button>
         )}
@@ -505,4 +599,4 @@ function ListItem({ video, token, allowDownload }: { video: Video; token: string
       )}
     </div>
   );
-}
+});

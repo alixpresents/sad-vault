@@ -46,12 +46,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Ressource non autorisee" }, { status: 403 });
   }
 
+  const isThumbnail = r2Key === (video as { thumbnail_key: string | null }).thumbnail_key;
+
   const command = new GetObjectCommand({
     Bucket: R2_BUCKET,
     Key: r2Key,
   });
 
-  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 900 });
+  // 1h expiry for presigned URLs
+  const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
 
-  return NextResponse.json({ presignedUrl });
+  // Cache thumbnail URLs longer (they rarely change), video URLs shorter
+  const cacheMaxAge = isThumbnail ? 1800 : 300;
+
+  return NextResponse.json(
+    { presignedUrl },
+    {
+      headers: {
+        "Cache-Control": `private, max-age=${cacheMaxAge}`,
+      },
+    }
+  );
 }
