@@ -276,6 +276,7 @@ export function VideosGallery({
                 onAnalyze={() => handleAnalyze(video.id)}
                 onTagClick={(tag) => setTagFilter(tag)}
                 onRemoveTag={(tag) => handleRemoveTag(video.id, tag)}
+                onTitleChange={async (t) => { await updateVideoTitle(video.id, video.talent_id, t); router.refresh(); }}
               />
             ))}
           </div>
@@ -346,13 +347,63 @@ export function VideosGallery({
   );
 }
 
+// ─── Inline edit title ──────────────────────────────────────────
+
+function InlineEditTitle({ title, onSave, dark = false }: { title: string; onSave: (t: string) => void; dark?: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const [saved, setSaved] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setDraft(title); }, [title]);
+  useEffect(() => { if (editing) { inputRef.current?.focus(); inputRef.current?.select(); } }, [editing]);
+
+  function save() {
+    const t = draft.trim();
+    if (!t || t === title) { setDraft(title); setEditing(false); return; }
+    onSave(t);
+    setEditing(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 600);
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setDraft(title); setEditing(false); } }}
+        className={`w-full border-0 border-b bg-transparent pb-0.5 outline-none ${
+          dark
+            ? "border-b-white/20 text-[14px] font-medium text-white"
+            : "border-b-neutral-300 text-[13px] font-semibold text-neutral-900"
+        }`}
+      />
+    );
+  }
+
+  return (
+    <p
+      onDoubleClick={() => setEditing(true)}
+      className={`truncate cursor-default transition-colors duration-300 ${
+        dark ? "text-[14px] font-medium text-white" : "text-[13px] font-semibold text-neutral-900"
+      } ${saved ? (dark ? "text-emerald-400" : "text-emerald-600") : ""}`}
+      title="Double-clic pour renommer"
+    >
+      {title}
+    </p>
+  );
+}
+
 // ─── Grid card ──────────────────────────────────────────────────
 
 function VideoGridCard({
-  video, stats, isSelected, isAnalyzing, onSelect, onPlay, onDelete, onAnalyze, onTagClick, onRemoveTag,
+  video, stats, isSelected, isAnalyzing, onSelect, onPlay, onDelete, onAnalyze, onTagClick, onRemoveTag, onTitleChange,
 }: {
   video: VideoWithTalent; stats?: VideoStats; isSelected: boolean; isAnalyzing: boolean;
-  onSelect: () => void; onPlay: () => void; onDelete: () => void; onAnalyze: () => void; onTagClick: (tag: string) => void; onRemoveTag: (tag: string) => void;
+  onSelect: () => void; onPlay: () => void; onDelete: () => void; onAnalyze: () => void; onTagClick: (tag: string) => void; onRemoveTag: (tag: string) => void; onTitleChange: (title: string) => void;
 }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
@@ -405,7 +456,7 @@ function VideoGridCard({
 
       {/* Info */}
       <div className="mt-2">
-        <p className="truncate text-[13px] font-semibold text-neutral-900">{video.title}</p>
+        <InlineEditTitle title={video.title} onSave={onTitleChange} />
         <p className="text-[11px] text-neutral-400">{video.talent_name}</p>
         {/* Tags */}
         {(video.tags ?? []).length > 0 && (
@@ -442,9 +493,6 @@ function VideoModal({
 }) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(video.title);
-  const titleRef = useRef<HTMLInputElement>(null);
   const replaceRef = useRef<HTMLInputElement>(null);
   const [replacing, setReplacing] = useState(false);
   const [replaceProgress, setReplaceProgress] = useState(0);
@@ -459,16 +507,7 @@ function VideoModal({
       .catch(() => {}).finally(() => setLoading(false));
   }, [video.r2_key]);
 
-  useEffect(() => { setTitleDraft(video.title); setEditingTitle(false); setLocalTags(video.tags ?? []); }, [video.id, video.title, video.tags]);
-  useEffect(() => { if (editingTitle) { titleRef.current?.focus(); titleRef.current?.select(); } }, [editingTitle]);
-
-  async function saveTitle() {
-    const trimmed = titleDraft.trim();
-    if (!trimmed || trimmed === video.title) { setEditingTitle(false); setTitleDraft(video.title); return; }
-    await updateVideoTitle(video.id, video.talent_id, trimmed);
-    setEditingTitle(false);
-    onRefresh();
-  }
+  useEffect(() => { setLocalTags(video.tags ?? []); }, [video.id, video.tags]);
 
   async function removeTag(tag: string) {
     const updated = localTags.filter((t) => t !== tag);
@@ -534,13 +573,7 @@ function VideoModal({
         {/* Info */}
         <div className="mt-4 flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            {editingTitle ? (
-              <input ref={titleRef} value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} onBlur={saveTitle}
-                onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") { setEditingTitle(false); setTitleDraft(video.title); } }}
-                className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5 text-[14px] font-medium text-white outline-none" />
-            ) : (
-              <button onClick={() => setEditingTitle(true)} className="truncate text-left text-[14px] font-medium text-white hover:underline" title="Cliquer pour renommer">{video.title}</button>
-            )}
+            <InlineEditTitle dark title={video.title} onSave={async (t) => { await updateVideoTitle(video.id, video.talent_id, t); onRefresh(); }} />
             <div className="mt-1 flex items-center gap-3 text-[12px] text-white/40">
               <Link href={`/talents/${video.talent_id}`} className="hover:text-white/70" onClick={onClose}>{video.talent_name}</Link>
               {video.duration_seconds && <span>{formatDuration(video.duration_seconds)}</span>}
@@ -571,7 +604,6 @@ function VideoModal({
             <button onClick={onAnalyze} disabled={isAnalyzing || !video.thumbnail_key} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white/70 disabled:opacity-30" title="Auto-tag IA">
               <Sparkles className={`h-3.5 w-3.5 ${isAnalyzing ? "animate-pulse" : ""}`} />
             </button>
-            <button onClick={() => setEditingTitle(true)} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white/70" title="Renommer"><Pencil className="h-3.5 w-3.5" /></button>
             <button onClick={() => replaceRef.current?.click()} disabled={replacing} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white/70" title="Remplacer"><RefreshCw className={`h-3.5 w-3.5 ${replacing ? "animate-spin" : ""}`} /></button>
             <button onClick={onDelete} className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-red-500/20 hover:text-red-400" title="Supprimer"><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
