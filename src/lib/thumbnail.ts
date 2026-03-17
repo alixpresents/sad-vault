@@ -1,11 +1,11 @@
 // Client-side thumbnail generation from video via canvas
 
-const THUMB_MAX_W = 480;
-const THUMB_MAX_H = 270;
+const THUMB_MAX_W = 960;
+const THUMB_MAX_H = 540;
 
 export function captureVideoFrame(
   video: HTMLVideoElement,
-  quality = 0.85
+  quality = 0.92
 ): Promise<Blob | null> {
   return new Promise((resolve) => {
     const srcW = video.videoWidth;

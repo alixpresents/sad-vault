@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Trash2, Play, Loader2, Camera, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,6 +111,7 @@ export function VideoCard({
   video: Video;
   talentSlug: string;
 }) {
+  const router = useRouter();
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -239,11 +241,8 @@ export function VideoCard({
       if (result?.error) throw new Error(result.error);
 
       setReplaceState("done");
-      // Clear cached video URL so it reloads
-      setVideoUrl(null);
-
-      // Auto-dismiss after 2s
-      setTimeout(() => setReplaceState("idle"), 2000);
+      // Refresh the page to load new thumbnail and updated data
+      router.refresh();
     } catch (err) {
       setReplaceState("error");
       setReplaceError(err instanceof Error ? err.message : "Erreur inconnue");
