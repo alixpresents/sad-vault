@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { filename, contentType, talentSlug } = body;
+  const { filename, contentType, talentSlug, type } = body;
 
   if (!filename || !contentType || !talentSlug) {
     return NextResponse.json(
@@ -24,9 +24,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ext = filename.split(".").pop();
   const uuid = crypto.randomUUID();
-  const r2Key = `videos/${talentSlug}/${uuid}.${ext}`;
+  let r2Key: string;
+
+  if (type === "thumbnail") {
+    r2Key = `thumbnails/${talentSlug}/${uuid}.jpg`;
+  } else {
+    const ext = filename.split(".").pop();
+    r2Key = `videos/${talentSlug}/${uuid}.${ext}`;
+  }
 
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET,

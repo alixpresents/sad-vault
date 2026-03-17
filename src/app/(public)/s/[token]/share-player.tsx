@@ -23,6 +23,30 @@ export function SharePlayer({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+
+  // Load thumbnail
+  useEffect(() => {
+    if (!video.thumbnail_key) return;
+    let cancelled = false;
+
+    async function loadThumbnail() {
+      try {
+        const res = await fetch(
+          `/api/share?token=${encodeURIComponent(token)}&key=${encodeURIComponent(video.thumbnail_key!)}`
+        );
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setThumbnailUrl(data.presignedUrl);
+        }
+      } catch {
+        // Thumbnail is optional, ignore errors
+      }
+    }
+
+    loadThumbnail();
+    return () => { cancelled = true; };
+  }, [video.thumbnail_key, token]);
 
   async function loadVideo() {
     if (videoUrl || loading) return;
@@ -78,22 +102,34 @@ export function SharePlayer({
             type="button"
             onClick={loadVideo}
             disabled={loading}
-            className="flex h-full w-full items-center justify-center transition-colors hover:bg-white/[0.04]"
+            className="relative flex h-full w-full items-center justify-center transition-colors hover:bg-white/[0.04]"
           >
-            {loading ? (
-              <Loader2 className="size-8 animate-spin text-white/30" />
-            ) : error ? (
-              <div className="flex flex-col items-center gap-2">
-                <RotateCw className="size-6 text-white/40" />
-                <p className="text-xs text-white/40">
-                  Erreur. Cliquer pour reessayer.
-                </p>
-              </div>
-            ) : (
-              <div className="flex size-14 items-center justify-center rounded-full bg-white/10 transition-transform hover:scale-105">
-                <Play className="ml-0.5 size-5 text-white" />
-              </div>
+            {/* Thumbnail */}
+            {thumbnailUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={thumbnailUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
             )}
+
+            <div className="relative z-10">
+              {loading ? (
+                <Loader2 className="size-8 animate-spin text-white/30" />
+              ) : error ? (
+                <div className="flex flex-col items-center gap-2">
+                  <RotateCw className="size-6 text-white/40" />
+                  <p className="text-xs text-white/40">
+                    Erreur. Cliquer pour reessayer.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex size-14 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition-transform hover:scale-105">
+                  <Play className="ml-0.5 size-5 text-white" />
+                </div>
+              )}
+            </div>
           </button>
         )}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Trash2, Play, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Trash2, Play, Loader2, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Video } from "@/lib/types";
 import { deleteVideo } from "@/app/(admin)/uploads/actions";
+import { ThumbnailPicker } from "./thumbnail-picker";
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return "--:--";
@@ -31,12 +32,39 @@ function formatBytes(bytes: number | null) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
-export function VideoCard({ video }: { video: Video }) {
+export function VideoCard({
+  video,
+  talentSlug,
+}: {
+  video: Video;
+  talentSlug: string;
+}) {
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loadingUrl, setLoadingUrl] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [showThumbnailPicker, setShowThumbnailPicker] = useState(false);
+
+  // Load thumbnail presigned URL
+  useEffect(() => {
+    if (!video.thumbnail_key) return;
+    let cancelled = false;
+
+    async function loadThumbnail() {
+      const res = await fetch(
+        `/api/video?key=${encodeURIComponent(video.thumbnail_key!)}`
+      );
+      if (res.ok && !cancelled) {
+        const data = await res.json();
+        setThumbnailUrl(data.presignedUrl);
+      }
+    }
+
+    loadThumbnail();
+    return () => { cancelled = true; };
+  }, [video.thumbnail_key]);
 
   async function handlePlay() {
     if (videoUrl || loadingUrl) return;
@@ -79,23 +107,39 @@ export function VideoCard({ video }: { video: Video }) {
               type="button"
               onClick={handlePlay}
               disabled={loadingUrl}
-              className="flex h-full w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+              className="relative flex h-full w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
             >
-              {loadingUrl ? (
-                <Loader2 className="size-8 animate-spin" />
-              ) : loadError ? (
-                <div className="flex flex-col items-center gap-1">
-                  <Play className="size-6" />
-                  <span className="text-xs">Reessayer</span>
-                </div>
-              ) : (
-                <Play className="size-8" />
+              {/* Thumbnail background */}
+              {thumbnailUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={thumbnailUrl}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
               )}
+
+              {/* Play overlay */}
+              <div className="relative z-10">
+                {loadingUrl ? (
+                  <Loader2 className="size-8 animate-spin" />
+                ) : loadError ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <Play className="size-6" />
+                    <span className="text-xs">Reessayer</span>
+                  </div>
+                ) : (
+                  <div className={`flex size-10 items-center justify-center rounded-full ${thumbnailUrl ? "bg-black/50 text-white" : ""}`}>
+                    <Play className="ml-0.5 size-5" />
+                  </div>
+                )}
+              </div>
             </button>
           )}
+
           {/* Duration badge */}
           {!videoUrl && video.duration_seconds && (
-            <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tabular-nums text-white">
+            <span className="absolute bottom-2 right-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tabular-nums text-white">
               {formatDuration(video.duration_seconds)}
             </span>
           )}
@@ -109,17 +153,35 @@ export function VideoCard({ video }: { video: Video }) {
               {formatBytes(video.file_size_bytes)}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-            onClick={() => setShowDelete(true)}
-          >
-            <Trash2 className="text-destructive" />
-          </Button>
+          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setShowThumbnailPicker(true)}
+              title="Modifier le thumbnail"
+            >
+              <Camera />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setShowDelete(true)}
+            >
+              <Trash2 className="text-destructive" />
+            </Button>
+          </div>
         </div>
       </div>
 
+      {/* Thumbnail picker dialog */}
+      <ThumbnailPicker
+        video={video}
+        talentSlug={talentSlug}
+        open={showThumbnailPicker}
+        onOpenChange={setShowThumbnailPicker}
+      />
+
+      {/* Delete dialog */}
       <AlertDialog open={showDelete} onOpenChange={setShowDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>

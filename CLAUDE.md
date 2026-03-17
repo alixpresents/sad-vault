@@ -12,7 +12,7 @@ Projet porté par Alix pour Sad Pictures / RZRE.
 - **Stockage vidéo** : Cloudflare R2 (S3-compatible, zero egress fees)
 - **Auth** : Supabase Auth (uniquement côté admin)
 - **Déploiement** : Vercel
-- **Domaine** : vault.sad-pictures.com (ou reels.sad-pictures.com)
+- **Domaine** : reel.sad-pictures.com
 
 ## Architecture
 

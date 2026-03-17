@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/select";
 import type { Talent } from "@/lib/types";
 import { createVideo } from "@/app/(admin)/uploads/actions";
+import { seekAndCapture, uploadThumbnail } from "@/lib/thumbnail";
 
-type UploadState = "idle" | "uploading" | "saving" | "done" | "error";
+type UploadState = "idle" | "uploading" | "thumbnail" | "saving" | "done" | "error";
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 o";
@@ -24,19 +25,6 @@ function formatBytes(bytes: number) {
   const sizes = ["o", "Ko", "Mo", "Go"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
-
-function getVideoDuration(file: File): Promise<number | null> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(video.src);
-      resolve(Math.round(video.duration));
-    };
-    video.onerror = () => resolve(null);
-    video.src = URL.createObjectURL(file);
-  });
 }
 
 export function VideoUpload({
@@ -70,7 +58,6 @@ export function VideoUpload({
       setFile(selected);
       setError(null);
 
-      // Auto-fill title from filename if empty
       if (!title) {
         const name = selected.name.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");
         setTitle(name);
@@ -80,21 +67,21 @@ export function VideoUpload({
   );
 
   async function handleUpload() {
-    if (!file || !talentId || !title) return;
+    if (!file || !talentId || !title || !selectedTalent) return;
 
     setError(null);
     setState("uploading");
     setProgress(0);
 
     try {
-      // 1. Get presigned URL
+      // 1. Get presigned URL for video
       const res = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           filename: file.name,
           contentType: file.type,
-          talentSlug: selectedTalent!.slug,
+          talentSlug: selectedTalent.slug,
         }),
       });
 
@@ -105,7 +92,7 @@ export function VideoUpload({
 
       const { presignedUrl, r2Key } = await res.json();
 
-      // 2. Upload with XHR for progress tracking
+      // 2. Upload video with XHR for progress
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         abortRef.current = xhr;
@@ -132,17 +119,26 @@ export function VideoUpload({
         xhr.send(file);
       });
 
-      // 3. Get video duration
-      setState("saving");
-      const duration = await getVideoDuration(file);
+      // 3. Generate thumbnail + get duration
+      setState("thumbnail");
+      let thumbnailKey: string | null = null;
+      let duration: number | null = null;
+
+      const capture = await seekAndCapture(file);
+      if (capture) {
+        duration = capture.duration;
+        thumbnailKey = await uploadThumbnail(capture.blob, selectedTalent.slug);
+      }
 
       // 4. Save to database
+      setState("saving");
       const result = await createVideo({
         talent_id: talentId,
         title,
         r2_key: r2Key,
         file_size_bytes: file.size,
         duration_seconds: duration,
+        thumbnail_key: thumbnailKey,
       });
 
       if (result?.error) {
@@ -175,12 +171,14 @@ export function VideoUpload({
     }
   }
 
+  const isBusy = state === "uploading" || state === "thumbnail" || state === "saving";
+
   return (
     <div className="max-w-lg space-y-6">
       {/* Talent select */}
       <div className="space-y-2">
         <Label>Talent</Label>
-        <Select value={talentId} onValueChange={setTalentId} disabled={state === "uploading"}>
+        <Select value={talentId} onValueChange={setTalentId} disabled={isBusy}>
           <SelectTrigger>
             <SelectValue placeholder="Selectionner un talent" />
           </SelectTrigger>
@@ -202,7 +200,7 @@ export function VideoUpload({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Titre de la video"
-          disabled={state === "uploading"}
+          disabled={isBusy}
         />
       </div>
 
@@ -252,14 +250,14 @@ export function VideoUpload({
       </div>
 
       {/* Progress */}
-      {(state === "uploading" || state === "saving") && (
+      {isBusy && (
         <div className="space-y-2">
-          <Progress value={state === "saving" ? 100 : progress} />
+          <Progress value={state === "uploading" ? progress : 100} />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {state === "saving"
-                ? "Enregistrement..."
-                : `Upload en cours... ${progress}%`}
+              {state === "uploading" && `Upload en cours... ${progress}%`}
+              {state === "thumbnail" && "Generation du thumbnail..."}
+              {state === "saving" && "Enregistrement..."}
             </span>
             {state === "uploading" && (
               <Button variant="ghost" size="xs" onClick={handleCancel}>
@@ -293,11 +291,9 @@ export function VideoUpload({
         ) : (
           <Button
             onClick={handleUpload}
-            disabled={!file || !talentId || !title || state === "uploading" || state === "saving"}
+            disabled={!file || !talentId || !title || isBusy}
           >
-            {state === "uploading" || state === "saving"
-              ? "Upload en cours..."
-              : "Uploader"}
+            {isBusy ? "Upload en cours..." : "Uploader"}
           </Button>
         )}
       </div>

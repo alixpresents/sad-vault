@@ -4,7 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServerClient } from "@/lib/supabase-server";
 
-// Public endpoint — generates presigned GET URLs for videos in a valid share link
+// Public endpoint — generates presigned GET URLs for videos/thumbnails in a valid share link
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   const r2Key = request.nextUrl.searchParams.get("key");
@@ -33,16 +33,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Lien expire" }, { status: 410 });
   }
 
-  // Verify this r2_key belongs to one of the videos in the share link
+  // Verify this r2_key (video or thumbnail) belongs to one of the videos in the share link
   const { data: video } = await supabase
     .from("videos")
-    .select("id")
-    .eq("r2_key", r2Key)
+    .select("id, r2_key, thumbnail_key")
     .in("id", link.video_ids)
+    .or(`r2_key.eq.${r2Key},thumbnail_key.eq.${r2Key}`)
+    .limit(1)
     .single();
 
   if (!video) {
-    return NextResponse.json({ error: "Video non autorisee" }, { status: 403 });
+    return NextResponse.json({ error: "Ressource non autorisee" }, { status: 403 });
   }
 
   const command = new GetObjectCommand({
