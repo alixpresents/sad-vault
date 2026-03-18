@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Loader2, Film } from "lucide-react";
+import { Loader2, Film, Palette } from "lucide-react";
 import { extractFilmstripFromUrl } from "@/lib/thumbnail";
 
 type VideoItem = {
@@ -9,6 +9,12 @@ type VideoItem = {
   title: string;
   talentSlug: string;
   videoUrl: string;
+};
+
+type PaletteItem = {
+  id: string;
+  title: string;
+  filmstripKeys: string[];
 };
 
 type LogEntry = {
@@ -19,6 +25,7 @@ type LogEntry = {
 
 export default function RegeneratePage() {
   const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [paletteVideos, setPaletteVideos] = useState<PaletteItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -32,9 +39,13 @@ export default function RegeneratePage() {
     setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
 
+  // ─── Filmstrip scan ─────────────────────────────────────────
+
   async function fetchVideos() {
     setLoading(true);
     setLogs([]);
+    setVideos([]);
+    setPaletteVideos([]);
     try {
       const res = await fetch("/api/regenerate-filmstrips");
       if (!res.ok) throw new Error("Erreur API");
@@ -54,25 +65,17 @@ export default function RegeneratePage() {
     setProgress({ current: 0, total: videos.length });
 
     for (let i = 0; i < videos.length; i++) {
-      if (cancelledRef.current) {
-        log("Annule par l'utilisateur", "error");
-        break;
-      }
+      if (cancelledRef.current) { log("Annule", "error"); break; }
 
       const video = videos[i];
       setProgress({ current: i + 1, total: videos.length });
       log(`[${i + 1}/${videos.length}] ${video.title}...`);
 
       try {
-        // 1. Extract frames client-side
         const blobs = await extractFilmstripFromUrl(video.videoUrl);
-        if (blobs.length === 0) {
-          log(`  Aucune frame extraite (video trop courte ou erreur)`, "error");
-          continue;
-        }
+        if (blobs.length === 0) { log(`  Aucune frame extraite`, "error"); continue; }
         log(`  ${blobs.length} frames extraites`);
 
-        // 2. Get presigned PUT URLs
         const putRes = await fetch("/api/regenerate-filmstrips", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -81,7 +84,6 @@ export default function RegeneratePage() {
         if (!putRes.ok) throw new Error("Erreur presigned URLs");
         const { frames } = await putRes.json();
 
-        // 3. Upload each frame
         const uploadedKeys: string[] = [];
         for (const frame of frames as { index: number; presignedUrl: string; r2Key: string }[]) {
           const uploadRes = await fetch(frame.presignedUrl, {
@@ -89,13 +91,10 @@ export default function RegeneratePage() {
             headers: { "Content-Type": "image/jpeg" },
             body: blobs[frame.index],
           });
-          if (uploadRes.ok) {
-            uploadedKeys.push(frame.r2Key);
-          }
+          if (uploadRes.ok) uploadedKeys.push(frame.r2Key);
         }
         log(`  ${uploadedKeys.length} frames uploadees`);
 
-        // 4. Update DB + extract palette colors server-side
         log(`  Extraction palette...`);
         const patchRes = await fetch("/api/regenerate-filmstrips", {
           method: "PATCH",
@@ -104,9 +103,7 @@ export default function RegeneratePage() {
         });
         if (!patchRes.ok) throw new Error("Erreur DB update");
         const patchData = await patchRes.json();
-        const colorCount = patchData.paletteColors?.length ?? 0;
-
-        log(`  OK (${colorCount} couleurs)`, "success");
+        log(`  OK (${patchData.paletteColors?.length ?? 0} couleurs)`, "success");
       } catch (err) {
         log(`  Erreur: ${err instanceof Error ? err.message : "inconnue"}`, "error");
       }
@@ -116,6 +113,66 @@ export default function RegeneratePage() {
     log("Termine !", "success");
   }
 
+  // ─── Palette-only extraction ────────────────────────────────
+
+  async function fetchPaletteVideos() {
+    setLoading(true);
+    setLogs([]);
+    setVideos([]);
+    setPaletteVideos([]);
+    try {
+      const res = await fetch("/api/regenerate-filmstrips", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list" }),
+      });
+      if (!res.ok) throw new Error("Erreur API");
+      const data = await res.json();
+      setPaletteVideos(data.videos);
+      log(`${data.total} video(s) avec filmstrip mais sans palette`, "info");
+    } catch (err) {
+      log(`Erreur: ${err instanceof Error ? err.message : "inconnue"}`, "error");
+    }
+    setLoading(false);
+  }
+
+  async function runPaletteExtraction() {
+    if (paletteVideos.length === 0) return;
+    setRunning(true);
+    cancelledRef.current = false;
+    setProgress({ current: 0, total: paletteVideos.length });
+
+    for (let i = 0; i < paletteVideos.length; i++) {
+      if (cancelledRef.current) { log("Annule", "error"); break; }
+
+      const video = paletteVideos[i];
+      setProgress({ current: i + 1, total: paletteVideos.length });
+      log(`[${i + 1}/${paletteVideos.length}] ${video.title}...`);
+
+      try {
+        const res = await fetch("/api/regenerate-filmstrips", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "extract",
+            videoId: video.id,
+            filmstripKeys: video.filmstripKeys,
+          }),
+        });
+        if (!res.ok) throw new Error("Erreur extraction");
+        const data = await res.json();
+        log(`  OK (${data.paletteColors?.length ?? 0} couleurs)`, "success");
+      } catch (err) {
+        log(`  Erreur: ${err instanceof Error ? err.message : "inconnue"}`, "error");
+      }
+    }
+
+    setRunning(false);
+    log("Termine !", "success");
+  }
+
+  // ─── Render ─────────────────────────────────────────────────
+
   return (
     <div style={{ maxWidth: 680 }} className="mx-auto">
       <div className="mb-6 flex items-center gap-3">
@@ -124,11 +181,11 @@ export default function RegeneratePage() {
       </div>
 
       <p className="mb-6 text-sm text-neutral-500">
-        Genere les 5 frames filmstrip pour toutes les videos existantes qui n'en ont pas encore.
-        Le process tourne dans le navigateur (extraction canvas), video par video.
+        Genere les frames filmstrip et/ou extrait les palettes de couleurs pour les videos existantes.
       </p>
 
-      <div className="mb-6 flex gap-3">
+      <div className="mb-6 flex flex-wrap gap-3">
+        {/* Filmstrip scan */}
         <button
           onClick={fetchVideos}
           disabled={loading || running}
@@ -139,7 +196,7 @@ export default function RegeneratePage() {
               <Loader2 className="size-3.5 animate-spin" /> Chargement...
             </span>
           ) : (
-            "Scanner les videos"
+            "Scanner filmstrips"
           )}
         </button>
 
@@ -148,7 +205,27 @@ export default function RegeneratePage() {
             onClick={runRegeneration}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
           >
-            Lancer ({videos.length} video{videos.length > 1 ? "s" : ""})
+            Generer filmstrips ({videos.length})
+          </button>
+        )}
+
+        {/* Palette scan */}
+        <button
+          onClick={fetchPaletteVideos}
+          disabled={loading || running}
+          className="flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50"
+        >
+          <Palette className="size-3.5" />
+          Scanner palettes
+        </button>
+
+        {paletteVideos.length > 0 && !running && (
+          <button
+            onClick={runPaletteExtraction}
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+          >
+            <Palette className="size-3.5" />
+            Extraire palettes ({paletteVideos.length})
           </button>
         )}
 
@@ -200,4 +277,3 @@ export default function RegeneratePage() {
     </div>
   );
 }
-

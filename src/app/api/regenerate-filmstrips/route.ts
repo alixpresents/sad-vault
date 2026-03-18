@@ -55,6 +55,65 @@ export async function GET() {
   return NextResponse.json({ videos: result, total: result.length });
 }
 
+/** PUT — extract palette colors from existing filmstrip frames (no frame regeneration) */
+export async function PUT(request: NextRequest) {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Non autorise" }, { status: 401 });
+  }
+
+  const { action } = await request.json();
+
+  // List videos needing palette extraction
+  if (action === "list") {
+    const { data: videos, error } = await supabase
+      .from("videos")
+      .select("id, title, filmstrip_keys, palette_colors")
+      .order("created_at", { ascending: true });
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const needsPalette = (videos as {
+      id: string; title: string;
+      filmstrip_keys: string[] | null;
+      palette_colors: string[] | null;
+    }[]).filter(
+      (v) => v.filmstrip_keys && v.filmstrip_keys.length > 0
+        && (!v.palette_colors || v.palette_colors.length === 0)
+    );
+
+    return NextResponse.json({
+      videos: needsPalette.map((v) => ({ id: v.id, title: v.title, filmstripKeys: v.filmstrip_keys })),
+      total: needsPalette.length,
+    });
+  }
+
+  // Extract palette for a single video
+  if (action === "extract") {
+    const { videoId, filmstripKeys } = await request.json();
+    if (!videoId || !Array.isArray(filmstripKeys) || filmstripKeys.length === 0) {
+      return NextResponse.json({ error: "videoId et filmstripKeys requis" }, { status: 400 });
+    }
+
+    const { extractPaletteFromR2Keys } = await import("@/lib/palette");
+    const colors = await extractPaletteFromR2Keys(filmstripKeys);
+
+    const { error } = await supabase
+      .from("videos")
+      .update({ palette_colors: colors })
+      .eq("id", videoId);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true, paletteColors: colors });
+  }
+
+  return NextResponse.json({ error: "action invalide" }, { status: 400 });
+}
+
 /** POST — save filmstrip keys for a single video + generate presigned PUT URLs for frames */
 export async function POST(request: NextRequest) {
   const supabase = await createServerClient();
