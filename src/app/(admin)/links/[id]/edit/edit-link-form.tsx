@@ -11,7 +11,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Switch } from "@/components/ui/switch";
 import type { ShareLink, Video, Talent } from "@/lib/types";
-import { VideoPreviewModal } from "@/components/video-preview-modal";
 import { updateShareLink } from "../../actions";
 import { SlugField } from "../../slug-field";
 
@@ -43,63 +42,81 @@ function formatDuration(s: number | null) {
 // Thumbnail URL cache shared across re-renders
 const thumbCache = new Map<string, string>();
 
-function MiniThumbnail({ thumbnailKey, onClick }: { thumbnailKey: string | null; onClick?: () => void }) {
-  const [url, setUrl] = useState<string | null>(thumbnailKey ? thumbCache.get(thumbnailKey) ?? null : null);
+function SortableVideoItem({ video, onRemove }: { video: Video; onRemove: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: video.id });
+  const [thumbUrl, setThumbUrl] = useState<string | null>(video.thumbnail_key ? thumbCache.get(video.thumbnail_key) ?? null : null);
+  const [playing, setPlaying] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
+  // Fetch thumbnail
   useEffect(() => {
-    if (!thumbnailKey) return;
-    if (thumbCache.has(thumbnailKey)) { setUrl(thumbCache.get(thumbnailKey)!); return; }
+    const key = video.thumbnail_key;
+    if (!key) return;
+    if (thumbCache.has(key)) { setThumbUrl(thumbCache.get(key)!); return; }
     let cancelled = false;
-    fetch(`/api/video?key=${encodeURIComponent(thumbnailKey)}`)
+    fetch(`/api/video?key=${encodeURIComponent(key)}`)
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
-        if (d?.presignedUrl && !cancelled) {
-          thumbCache.set(thumbnailKey, d.presignedUrl);
-          setUrl(d.presignedUrl);
-        }
-      })
-      .catch(() => {});
+        if (d?.presignedUrl && !cancelled) { thumbCache.set(key, d.presignedUrl); setThumbUrl(d.presignedUrl); }
+      }).catch(() => {});
     return () => { cancelled = true; };
-  }, [thumbnailKey]);
+  }, [video.thumbnail_key]);
 
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="shrink-0 overflow-hidden rounded border border-neutral-100 transition-opacity hover:opacity-80"
-      style={{ width: 64, height: 36 }}
-    >
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-neutral-100">
-          <VideoIcon className="size-3.5 text-neutral-300" />
-        </div>
-      )}
-    </button>
-  );
-}
+  function handleThumbClick() {
+    if (playing) { setPlaying(false); setVideoUrl(null); return; }
+    setPlaying(true);
+    // Fetch video presigned URL
+    fetch(`/api/video?key=${encodeURIComponent(video.r2_key)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.presignedUrl) setVideoUrl(d.presignedUrl); else setPlaying(false); })
+      .catch(() => setPlaying(false));
+  }
 
-function SortableVideoItem({ video, onRemove, onPreview }: { video: Video; onRemove: () => void; onPreview: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: video.id });
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-3 py-2.5 ${isDragging ? "z-10 shadow-md" : ""}`}
+      className={`overflow-hidden rounded-lg border border-neutral-200 bg-white ${isDragging ? "z-10 shadow-md" : ""}`}
     >
-      <button type="button" className="shrink-0 cursor-grab touch-none text-neutral-300 hover:text-neutral-500" {...attributes} {...listeners}>
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <MiniThumbnail thumbnailKey={video.thumbnail_key} onClick={onPreview} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[12px] font-medium text-neutral-700">{video.title}</p>
-        <p className="text-[10px] text-neutral-400">{formatDuration(video.duration_seconds)}</p>
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <button type="button" className="shrink-0 cursor-grab touch-none text-neutral-300 hover:text-neutral-500" {...attributes} {...listeners}>
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleThumbClick}
+          className="shrink-0 overflow-hidden rounded border border-neutral-100 transition-opacity hover:opacity-80"
+          style={{ width: 64, height: 36 }}
+        >
+          {thumbUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={thumbUrl} alt="" className="h-full w-full object-cover" draggable={false} />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-neutral-100">
+              <VideoIcon className="size-3.5 text-neutral-300" />
+            </div>
+          )}
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-medium text-neutral-700">{video.title}</p>
+          <p className="text-[10px] text-neutral-400">{formatDuration(video.duration_seconds)}</p>
+        </div>
+        <button onClick={onRemove} className="shrink-0 rounded-md p-1 text-neutral-300 transition-colors hover:bg-red-50 hover:text-red-500">
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
-      <button onClick={onRemove} className="shrink-0 rounded-md p-1 text-neutral-300 transition-colors hover:bg-red-50 hover:text-red-500">
-        <X className="h-3.5 w-3.5" />
-      </button>
+      {playing && videoUrl && (
+        <div className="border-t border-neutral-100 bg-black">
+          <video
+            src={videoUrl}
+            controls
+            autoPlay
+            playsInline
+            className="w-full"
+            onEnded={() => { setPlaying(false); setVideoUrl(null); }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -115,7 +132,6 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
   const [submitting, setSubmitting] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [addFilter, setAddFilter] = useState("all");
-  const [previewVideo, setPreviewVideo] = useState<Video | null>(null);
 
   const handleSlugChange = useCallback((slug: string) => setCustomSlug(slug), []);
 
@@ -167,7 +183,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={videoIds} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-1.5">
-                {currentVideos.map((v) => <SortableVideoItem key={v.id} video={v} onRemove={() => setVideoIds((ids) => ids.filter((x) => x !== v.id))} onPreview={() => setPreviewVideo(v)} />)}
+                {currentVideos.map((v) => <SortableVideoItem key={v.id} video={v} onRemove={() => setVideoIds((ids) => ids.filter((x) => x !== v.id))} />)}
               </div>
             </SortableContext>
           </DndContext>
@@ -202,10 +218,6 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
         <AddVideosDialog open={showAdd} onClose={() => setShowAdd(false)} videos={available} talents={talents} talentMap={talentMap} filter={addFilter} onFilterChange={setAddFilter} onAdd={(ids) => { setVideoIds((p) => [...p, ...ids]); setShowAdd(false); }} />
       )}
 
-      {/* Video preview */}
-      {previewVideo && (
-        <VideoPreviewModal r2Key={previewVideo.r2_key} onClose={() => setPreviewVideo(null)} />
-      )}
     </div>
   );
 }
