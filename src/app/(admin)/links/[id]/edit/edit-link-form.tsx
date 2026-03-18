@@ -204,7 +204,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
 
       {/* Video preview */}
       {previewVideo && (
-        <VideoPreviewModal r2Key={previewVideo.r2_key} title={previewVideo.title} onClose={() => setPreviewVideo(null)} />
+        <VideoPreviewModal r2Key={previewVideo.r2_key} onClose={() => setPreviewVideo(null)} />
       )}
     </div>
   );
