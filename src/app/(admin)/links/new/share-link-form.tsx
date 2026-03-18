@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { ImageIcon, Palette, SlashIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { Talent, Video } from "@/lib/types";
+
+type FilmstripStyle = "thumbnails" | "colors" | "none";
 import { createShareLink } from "../actions";
 import { SlugField } from "../slug-field";
 
@@ -38,6 +41,7 @@ export function ShareLinkForm({ talents, videos, initialVideoIds }: { talents: T
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialVideoIds ?? []));
   const [expiration, setExpiration] = useState("none");
   const [allowDownload, setAllowDownload] = useState(false);
+  const [filmstripStyle, setFilmstripStyle] = useState<FilmstripStyle>("thumbnails");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -59,6 +63,7 @@ export function ShareLinkForm({ talents, videos, initialVideoIds }: { talents: T
       video_ids: Array.from(selected),
       expires_at: getExpirationDate(expiration),
       allow_download: allowDownload,
+      filmstrip_style: filmstripStyle,
     });
     if (result?.error) { setError(result.error); setSubmitting(false); }
   }
@@ -120,10 +125,46 @@ export function ShareLinkForm({ talents, videos, initialVideoIds }: { talents: T
         </div>
         <Switch checked={allowDownload} onCheckedChange={setAllowDownload} />
       </div>
+      <FilmstripStylePicker value={filmstripStyle} onChange={setFilmstripStyle} />
       {error && <p className="mb-4 text-[12px] text-red-600">{error}</p>}
       <button onClick={handleSubmit} disabled={submitting} className="rounded-md bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50">
         {submitting ? "Creation..." : "Creer le lien"}
       </button>
+    </div>
+  );
+}
+
+const FILMSTRIP_OPTIONS: { value: FilmstripStyle; label: string; icon: typeof ImageIcon }[] = [
+  { value: "thumbnails", label: "Vignettes", icon: ImageIcon },
+  { value: "colors", label: "Palette", icon: Palette },
+  { value: "none", label: "Aucun", icon: SlashIcon },
+];
+
+function FilmstripStylePicker({ value, onChange }: { value: FilmstripStyle; onChange: (v: FilmstripStyle) => void }) {
+  return (
+    <div className="mb-6">
+      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Style du filmstrip</label>
+      <div className="grid grid-cols-3 gap-2">
+        {FILMSTRIP_OPTIONS.map((opt) => {
+          const active = value === opt.value;
+          const Icon = opt.icon;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors ${
+                active
+                  ? "border-neutral-900 bg-neutral-900 text-white"
+                  : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-700"
+              }`}
+            >
+              <Icon className="size-4" />
+              <span className="text-[11px] font-medium">{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

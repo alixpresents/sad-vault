@@ -33,6 +33,7 @@ export type ShareLink = {
   expires_at: string | null;
   allow_download: boolean;
   is_active: boolean;
+  filmstrip_style: "thumbnails" | "colors" | "none";
   view_count: number;
   created_at: string;
   created_by: string | null;

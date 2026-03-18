@@ -93,13 +93,10 @@ export async function generateMetadata({
 
 export default async function SharePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ style?: string }>;
 }) {
   const { token: param } = await params;
-  const { style } = await searchParams;
   const supabase = createServiceClient();
   const link = await findLink(supabase, param);
 
@@ -166,7 +163,7 @@ export default async function SharePage({
       title={link.title}
       talentName={talentName}
       allowDownload={link.allow_download}
-      headerStyle={style === "colors" ? "colors" : "filmstrip"}
+      filmstripStyle={link.filmstrip_style ?? "thumbnails"}
     />
   );
 }

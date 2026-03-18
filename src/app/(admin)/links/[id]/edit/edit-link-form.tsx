@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { GripVertical, X, Plus } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { GripVertical, X, Plus, ImageIcon, Palette, SlashIcon, Video as VideoIcon } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
@@ -11,6 +11,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Switch } from "@/components/ui/switch";
 import type { ShareLink, Video, Talent } from "@/lib/types";
+import { VideoPreviewModal } from "@/components/video-preview-modal";
 import { updateShareLink } from "../../actions";
 import { SlugField } from "../../slug-field";
 
@@ -39,7 +40,48 @@ function formatDuration(s: number | null) {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
-function SortableVideoItem({ video, onRemove }: { video: Video; onRemove: () => void }) {
+// Thumbnail URL cache shared across re-renders
+const thumbCache = new Map<string, string>();
+
+function MiniThumbnail({ thumbnailKey, onClick }: { thumbnailKey: string | null; onClick?: () => void }) {
+  const [url, setUrl] = useState<string | null>(thumbnailKey ? thumbCache.get(thumbnailKey) ?? null : null);
+
+  useEffect(() => {
+    if (!thumbnailKey) return;
+    if (thumbCache.has(thumbnailKey)) { setUrl(thumbCache.get(thumbnailKey)!); return; }
+    let cancelled = false;
+    fetch(`/api/video?key=${encodeURIComponent(thumbnailKey)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d?.presignedUrl && !cancelled) {
+          thumbCache.set(thumbnailKey, d.presignedUrl);
+          setUrl(d.presignedUrl);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [thumbnailKey]);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 overflow-hidden rounded border border-neutral-100 transition-opacity hover:opacity-80"
+      style={{ width: 64, height: 36 }}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-neutral-100">
+          <VideoIcon className="size-3.5 text-neutral-300" />
+        </div>
+      )}
+    </button>
+  );
+}
+
+function SortableVideoItem({ video, onRemove, onPreview }: { video: Video; onRemove: () => void; onPreview: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: video.id });
   return (
     <div
@@ -50,6 +92,7 @@ function SortableVideoItem({ video, onRemove }: { video: Video; onRemove: () => 
       <button type="button" className="shrink-0 cursor-grab touch-none text-neutral-300 hover:text-neutral-500" {...attributes} {...listeners}>
         <GripVertical className="h-4 w-4" />
       </button>
+      <MiniThumbnail thumbnailKey={video.thumbnail_key} onClick={onPreview} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[12px] font-medium text-neutral-700">{video.title}</p>
         <p className="text-[10px] text-neutral-400">{formatDuration(video.duration_seconds)}</p>
@@ -67,10 +110,12 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
   const [videoIds, setVideoIds] = useState<string[]>(link.video_ids);
   const [expiration, setExpiration] = useState("none");
   const [allowDownload, setAllowDownload] = useState(link.allow_download);
+  const [filmstripStyle, setFilmstripStyle] = useState<"thumbnails" | "colors" | "none">(link.filmstrip_style ?? "thumbnails");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [addFilter, setAddFilter] = useState("all");
+  const [previewVideo, setPreviewVideo] = useState<Video | null>(null);
 
   const handleSlugChange = useCallback((slug: string) => setCustomSlug(slug), []);
 
@@ -93,7 +138,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
   async function handleSubmit() {
     if (videoIds.length === 0) { setError("Le lien doit contenir au moins une video."); return; }
     setError(null); setSubmitting(true);
-    const result = await updateShareLink(link.id, { title: title || null, custom_slug: customSlug || null, video_ids: videoIds, expires_at: getExpirationDate(expiration), allow_download: allowDownload });
+    const result = await updateShareLink(link.id, { title: title || null, custom_slug: customSlug || null, video_ids: videoIds, expires_at: getExpirationDate(expiration), allow_download: allowDownload, filmstrip_style: filmstripStyle });
     if (result?.error) { setError(result.error); setSubmitting(false); }
   }
 
@@ -122,7 +167,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={videoIds} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-1.5">
-                {currentVideos.map((v) => <SortableVideoItem key={v.id} video={v} onRemove={() => setVideoIds((ids) => ids.filter((x) => x !== v.id))} />)}
+                {currentVideos.map((v) => <SortableVideoItem key={v.id} video={v} onRemove={() => setVideoIds((ids) => ids.filter((x) => x !== v.id))} onPreview={() => setPreviewVideo(v)} />)}
               </div>
             </SortableContext>
           </DndContext>
@@ -146,6 +191,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
         </div>
         <Switch checked={allowDownload} onCheckedChange={setAllowDownload} />
       </div>
+      <FilmstripStylePicker value={filmstripStyle} onChange={setFilmstripStyle} />
       {error && <p className="mb-4 text-[12px] text-red-600">{error}</p>}
       <button onClick={handleSubmit} disabled={submitting} className="rounded-md bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50">
         {submitting ? "Enregistrement..." : "Enregistrer les modifications"}
@@ -155,6 +201,46 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
       {showAdd && (
         <AddVideosDialog open={showAdd} onClose={() => setShowAdd(false)} videos={available} talents={talents} talentMap={talentMap} filter={addFilter} onFilterChange={setAddFilter} onAdd={(ids) => { setVideoIds((p) => [...p, ...ids]); setShowAdd(false); }} />
       )}
+
+      {/* Video preview */}
+      {previewVideo && (
+        <VideoPreviewModal r2Key={previewVideo.r2_key} title={previewVideo.title} onClose={() => setPreviewVideo(null)} />
+      )}
+    </div>
+  );
+}
+
+const FILMSTRIP_OPTIONS: { value: "thumbnails" | "colors" | "none"; label: string; icon: typeof ImageIcon }[] = [
+  { value: "thumbnails", label: "Vignettes", icon: ImageIcon },
+  { value: "colors", label: "Palette", icon: Palette },
+  { value: "none", label: "Aucun", icon: SlashIcon },
+];
+
+function FilmstripStylePicker({ value, onChange }: { value: "thumbnails" | "colors" | "none"; onChange: (v: "thumbnails" | "colors" | "none") => void }) {
+  return (
+    <div className="mb-6">
+      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Style du filmstrip</label>
+      <div className="grid grid-cols-3 gap-2">
+        {FILMSTRIP_OPTIONS.map((opt) => {
+          const active = value === opt.value;
+          const Icon = opt.icon;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors ${
+                active
+                  ? "border-neutral-900 bg-neutral-900 text-white"
+                  : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-700"
+              }`}
+            >
+              <Icon className="size-4" />
+              <span className="text-[11px] font-medium">{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

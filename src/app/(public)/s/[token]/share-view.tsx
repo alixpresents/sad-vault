@@ -165,7 +165,7 @@ export function ShareView({
   title,
   talentName,
   allowDownload,
-  headerStyle = "filmstrip",
+  filmstripStyle = "thumbnails",
 }: {
   videos: Video[];
   token: string;
@@ -173,7 +173,7 @@ export function ShareView({
   title: string | null;
   talentName: string | null;
   allowDownload: boolean;
-  headerStyle?: "filmstrip" | "colors";
+  filmstripStyle?: "thumbnails" | "colors" | "none";
 }) {
   const [mode, setMode] = useState<ViewMode>("carousel");
   const [sessionId] = useState(() => crypto.randomUUID());
@@ -273,18 +273,15 @@ export function ShareView({
           </div>
 
           {/* Filmstrip / Color band */}
-          {headerStyle === "colors" ? (
-            allPaletteColors.length > 0 && (
-              <div className="mx-auto mt-4 max-w-5xl">
-                <ColorBand colors={allPaletteColors} />
-              </div>
-            )
-          ) : (
-            allKeys.length > 0 && (
-              <div className="mx-auto mt-4 max-w-5xl">
-                <Filmstrip videoFrames={perVideoUrls} />
-              </div>
-            )
+          {filmstripStyle === "colors" && allPaletteColors.length > 0 && (
+            <div className="mx-auto mt-4 max-w-5xl">
+              <ColorBand colors={allPaletteColors} />
+            </div>
+          )}
+          {filmstripStyle === "thumbnails" && allKeys.length > 0 && (
+            <div className="mx-auto mt-4 max-w-5xl">
+              <Filmstrip videoFrames={perVideoUrls} />
+            </div>
           )}
         </header>
 

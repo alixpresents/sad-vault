@@ -32,6 +32,8 @@ const slugSchema = z
   .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, "Uniquement lettres minuscules, chiffres et tirets (pas au debut/fin)")
   .nullable();
 
+const filmstripStyleSchema = z.enum(["thumbnails", "colors", "none"]).default("thumbnails");
+
 const shareLinkSchema = z.object({
   title: z.string().max(500).nullable(),
   custom_slug: slugSchema,
@@ -39,6 +41,7 @@ const shareLinkSchema = z.object({
   video_ids: z.array(z.string().uuid()).min(1, "Selectionnez au moins une video"),
   expires_at: z.string().datetime().nullable(),
   allow_download: z.boolean(),
+  filmstrip_style: filmstripStyleSchema,
 });
 
 export async function createShareLink(data: {
@@ -48,6 +51,7 @@ export async function createShareLink(data: {
   video_ids: string[];
   expires_at: string | null;
   allow_download: boolean;
+  filmstrip_style?: "thumbnails" | "colors" | "none";
 }) {
   const { supabase, user } = await requireAuth();
 
@@ -66,6 +70,7 @@ export async function createShareLink(data: {
     video_ids: parsed.data.video_ids,
     expires_at: parsed.data.expires_at,
     allow_download: parsed.data.allow_download,
+    filmstrip_style: parsed.data.filmstrip_style,
     created_by: user.id,
   });
 
@@ -86,6 +91,7 @@ const updateShareLinkSchema = z.object({
   video_ids: z.array(z.string().uuid()).min(1, "Le lien doit contenir au moins une video"),
   expires_at: z.string().datetime().nullable(),
   allow_download: z.boolean(),
+  filmstrip_style: filmstripStyleSchema,
 });
 
 export async function updateShareLink(
@@ -96,6 +102,7 @@ export async function updateShareLink(
     video_ids: string[];
     expires_at: string | null;
     allow_download: boolean;
+    filmstrip_style?: "thumbnails" | "colors" | "none";
   }
 ) {
   const { supabase } = await requireAuth();
@@ -117,6 +124,7 @@ export async function updateShareLink(
       video_ids: parsed.data.video_ids,
       expires_at: parsed.data.expires_at,
       allow_download: parsed.data.allow_download,
+      filmstrip_style: parsed.data.filmstrip_style,
     })
     .eq("id", id);
 
