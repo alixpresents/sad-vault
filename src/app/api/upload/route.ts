@@ -5,7 +5,7 @@ import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServerClient } from "@/lib/supabase-server";
 
 const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
-const ALLOWED_THUMBNAIL_TYPES = ["image/jpeg"];
+const ALLOWED_IMAGE_TYPES = ["image/jpeg"];
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerClient();
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { filename, contentType, talentSlug, type, replaceKey } = body;
+  const { filename, contentType, talentSlug, type, replaceKey, videoId, frameIndex } = body;
 
   if (!filename || !contentType || !talentSlug) {
     return NextResponse.json(
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Validate content type server-side
-  const allowedTypes = type === "thumbnail" ? ALLOWED_THUMBNAIL_TYPES : ALLOWED_VIDEO_TYPES;
+  const allowedTypes = (type === "thumbnail" || type === "filmstrip") ? ALLOWED_IMAGE_TYPES : ALLOWED_VIDEO_TYPES;
   if (!allowedTypes.includes(contentType)) {
     return NextResponse.json(
       { error: `Type de fichier non autorise: ${contentType}` },
@@ -49,6 +49,8 @@ export async function POST(request: NextRequest) {
   if (replaceKey && typeof replaceKey === "string" && replaceKey.startsWith("videos/")) {
     // Overwrite existing file at the same key
     r2Key = replaceKey;
+  } else if (type === "filmstrip") {
+    r2Key = `filmstrip/${videoId ?? crypto.randomUUID()}/${frameIndex ?? 0}.jpg`;
   } else if (type === "thumbnail") {
     r2Key = `thumbnails/${talentSlug}/${crypto.randomUUID()}.jpg`;
   } else {

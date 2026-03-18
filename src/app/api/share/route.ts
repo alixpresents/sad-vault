@@ -69,20 +69,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Lien expire" }, { status: 410 });
   }
 
-  // Verify this r2_key (video or thumbnail) belongs to one of the videos in the share link
-  const { data: video } = await supabase
+  // Verify this r2_key (video, thumbnail, or filmstrip) belongs to one of the videos in the share link
+  const { data: videos } = await supabase
     .from("videos")
-    .select("id, r2_key, thumbnail_key")
-    .in("id", link.video_ids)
-    .or(`r2_key.eq.${r2Key},thumbnail_key.eq.${r2Key}`)
-    .limit(1)
-    .single();
+    .select("id, r2_key, thumbnail_key, filmstrip_keys")
+    .in("id", link.video_ids);
 
-  if (!video) {
+  const matchedVideo = (videos as { id: string; r2_key: string; thumbnail_key: string | null; filmstrip_keys: string[] }[] | null)
+    ?.find((v) =>
+      v.r2_key === r2Key ||
+      v.thumbnail_key === r2Key ||
+      (v.filmstrip_keys && v.filmstrip_keys.includes(r2Key))
+    );
+
+  if (!matchedVideo) {
     return NextResponse.json({ error: "Ressource non autorisee" }, { status: 403 });
   }
 
-  const isThumbnail = r2Key === (video as { thumbnail_key: string | null }).thumbnail_key;
+  const isThumbnail = r2Key === matchedVideo.thumbnail_key ||
+    (matchedVideo.filmstrip_keys && matchedVideo.filmstrip_keys.includes(r2Key));
 
   const command = new GetObjectCommand({
     Bucket: R2_BUCKET,

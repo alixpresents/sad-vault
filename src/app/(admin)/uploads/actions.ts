@@ -119,6 +119,7 @@ const createVideoSchema = z.object({
   thumbnail_key: z.string().max(500).nullable(),
   file_hash: z.string().max(128).nullable(),
   original_filename: z.string().max(500).nullable(),
+  filmstrip_keys: z.array(z.string().max(500)).max(10).default([]),
 });
 
 export async function createVideo(data: {
@@ -130,6 +131,7 @@ export async function createVideo(data: {
   thumbnail_key: string | null;
   file_hash?: string | null;
   original_filename?: string | null;
+  filmstrip_keys?: string[];
 }) {
   const supabase = await requireAuth();
 
@@ -137,6 +139,7 @@ export async function createVideo(data: {
     ...data,
     file_hash: data.file_hash ?? null,
     original_filename: data.original_filename ?? null,
+    filmstrip_keys: data.filmstrip_keys ?? [],
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
@@ -309,4 +312,26 @@ export async function updateVideoThumbnail(
   }
 
   revalidatePath(`/talents/${talentId}`);
+}
+
+export async function updateFilmstripKeys(
+  videoId: string,
+  filmstripKeys: string[]
+) {
+  const supabase = await requireAuth();
+
+  if (!z.string().uuid().safeParse(videoId).success) {
+    return { error: "ID invalide" };
+  }
+
+  const cleaned = filmstripKeys.filter((k) => k.length > 0).slice(0, 10);
+
+  const { error } = await supabase
+    .from("videos")
+    .update({ filmstrip_keys: cleaned })
+    .eq("id", videoId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/videos");
 }

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import type { Talent } from "@/lib/types";
 import { createVideo, checkDuplicate, type DuplicateMatch } from "@/app/(admin)/uploads/actions";
-import { seekAndCapture, uploadThumbnail } from "@/lib/thumbnail";
+import { seekAndCapture, uploadThumbnail, extractFilmstripFrames, uploadFilmstripFrames } from "@/lib/thumbnail";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -239,13 +239,16 @@ export function VideoUpload({ talents, initialTalentId }: { talents: Talent[]; i
 
         if (cancelledRef.current) break;
 
-        // 3. Thumbnail
+        // 3. Thumbnail + filmstrip
         updateItem(item.id, { status: "thumbnail", progress: 100 });
         let thumbnailKey: string | null = null, duration: number | null = null;
         const capture = await seekAndCapture(item.file);
         if (capture) { duration = capture.duration; thumbnailKey = await uploadThumbnail(capture.blob, selectedTalent.slug); }
 
-        // 4. Save to DB
+        // Extract filmstrip frames in parallel with DB save prep
+        const filmstripBlobs = await extractFilmstripFrames(item.file);
+
+        // 4. Save to DB (without filmstrip keys first to get videoId)
         updateItem(item.id, { status: "saving" });
         const result = await createVideo({
           talent_id: talentId,
@@ -261,9 +264,23 @@ export function VideoUpload({ talents, initialTalentId }: { talents: Talent[]; i
 
         updateItem(item.id, { status: "done", videoId: result?.videoId ?? null });
 
-        // Auto-tag in background
-        if (result?.videoId && thumbnailKey) {
-          fetch("/api/analyze-video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ video_id: result.videoId }) }).catch(() => {});
+        // Upload filmstrip frames + auto-tag in background
+        if (result?.videoId) {
+          if (filmstripBlobs.length > 0) {
+            uploadFilmstripFrames(filmstripBlobs, selectedTalent.slug, result.videoId)
+              .then((keys) => {
+                if (keys.length > 0) {
+                  // Dynamic import to avoid circular deps
+                  import("@/app/(admin)/uploads/actions").then(({ updateFilmstripKeys }) => {
+                    updateFilmstripKeys(result.videoId!, keys);
+                  });
+                }
+              })
+              .catch(() => {});
+          }
+          if (thumbnailKey) {
+            fetch("/api/analyze-video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ video_id: result.videoId }) }).catch(() => {});
+          }
         }
       } catch (err) {
         updateItem(item.id, { status: "error", error: err instanceof Error ? err.message : "Erreur" });

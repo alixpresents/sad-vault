@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { Video } from "@/lib/types";
 import { useViewTracking } from "@/lib/use-view-tracking";
+import { Filmstrip } from "./filmstrip";
 
 type ViewMode = "carousel" | "list";
 
@@ -175,6 +176,31 @@ export function ShareView({
   const [sessionId] = useState(() => crypto.randomUUID());
   const tracking = useViewTracking({ shareLinkId, sessionId });
 
+  // Collect filmstrip R2 keys per video, preserving grouping
+  const perVideoKeys: string[][] = [];
+  const allKeys: string[] = [];
+  for (const v of videos) {
+    const keys = (v.filmstrip_keys && v.filmstrip_keys.length > 0)
+      ? v.filmstrip_keys
+      : v.thumbnail_key ? [v.thumbnail_key] : [];
+    perVideoKeys.push(keys);
+    allKeys.push(...keys);
+  }
+  const allResolvedUrls = useAllUrls(token, allKeys);
+
+  // Rebuild per-video resolved URL groups from the flat resolved array
+  const perVideoUrls: string[][] = [];
+  let offset = 0;
+  for (const keys of perVideoKeys) {
+    const group: string[] = [];
+    for (let i = 0; i < keys.length; i++) {
+      const url = allResolvedUrls[offset + i];
+      if (url) group.push(url);
+    }
+    perVideoUrls.push(group);
+    offset += keys.length;
+  }
+
   if (videos.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black text-white">
@@ -239,6 +265,13 @@ export function ShareView({
               </button>
             </div>
           </div>
+
+          {/* Filmstrip */}
+          {allKeys.length > 0 && (
+            <div className="mx-auto mt-4 max-w-5xl">
+              <Filmstrip videoFrames={perVideoUrls} />
+            </div>
+          )}
         </header>
 
         {/* Content */}
@@ -303,6 +336,36 @@ function CarouselVideoPlayer({ url, videoId, allowDownload }: { url: string; vid
       onEnded={() => tracking?.onEnded(videoId)}
     />
   );
+}
+
+/** Pre-fetch all thumbnail URLs for filmstrip (token passed directly, not from context) */
+function useAllUrls(token: string, keys: (string | null)[]) {
+  const [urls, setUrls] = useState<(string | null)[]>(() => keys.map(() => null));
+
+  // Stable dep key so the effect doesn't re-fire on every render
+  const keysKey = keys.map((k) => k ?? "").join(",");
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      keys.forEach((key, i) => {
+        if (!key) return;
+        fetchShareUrl(token, key).then((url) => {
+          if (!cancelled && url) {
+            setUrls((prev) => {
+              const next = [...prev];
+              next[i] = url;
+              return next;
+            });
+          }
+        });
+      });
+    }, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, keysKey]);
+
+  return urls;
 }
 
 function CarouselView({

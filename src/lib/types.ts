@@ -18,6 +18,7 @@ export type Video = {
   file_hash: string | null;
   original_filename: string | null;
   tags: string[];
+  filmstrip_keys: string[];
   created_at: string;
 };
 
