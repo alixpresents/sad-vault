@@ -273,14 +273,18 @@ export function ShareView({
           </div>
 
           {/* Filmstrip / Color band */}
-          {allKeys.length > 0 && (
-            <div className="mx-auto mt-4 max-w-5xl">
-              {headerStyle === "colors" ? (
+          {headerStyle === "colors" ? (
+            allPaletteColors.length > 0 && (
+              <div className="mx-auto mt-4 max-w-5xl">
                 <ColorBand colors={allPaletteColors} />
-              ) : (
+              </div>
+            )
+          ) : (
+            allKeys.length > 0 && (
+              <div className="mx-auto mt-4 max-w-5xl">
                 <Filmstrip videoFrames={perVideoUrls} />
-              )}
-            </div>
+              </div>
+            )
           )}
         </header>
 
