@@ -1,12 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Loader2, CheckCircle2, AlertCircle, Film } from "lucide-react";
-
-const FILMSTRIP_W = 80;
-const FILMSTRIP_H = 45;
-const FILMSTRIP_QUALITY = 0.5;
-const FILMSTRIP_OFFSETS = [0.1, 0.25, 0.5, 0.75, 0.9];
+import { Loader2, Film } from "lucide-react";
+import { extractFilmstripFromUrl } from "@/lib/thumbnail";
 
 type VideoItem = {
   id: string;
@@ -69,7 +65,7 @@ export default function RegeneratePage() {
 
       try {
         // 1. Extract frames client-side
-        const blobs = await extractFrames(video.videoUrl);
+        const blobs = await extractFilmstripFromUrl(video.videoUrl);
         if (blobs.length === 0) {
           log(`  Aucune frame extraite (video trop courte ou erreur)`, "error");
           continue;
@@ -99,15 +95,18 @@ export default function RegeneratePage() {
         }
         log(`  ${uploadedKeys.length} frames uploadees`);
 
-        // 4. Update DB
+        // 4. Update DB + extract palette colors server-side
+        log(`  Extraction palette...`);
         const patchRes = await fetch("/api/regenerate-filmstrips", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ videoId: video.id, filmstripKeys: uploadedKeys }),
         });
         if (!patchRes.ok) throw new Error("Erreur DB update");
+        const patchData = await patchRes.json();
+        const colorCount = patchData.paletteColors?.length ?? 0;
 
-        log(`  OK`, "success");
+        log(`  OK (${colorCount} couleurs)`, "success");
       } catch (err) {
         log(`  Erreur: ${err instanceof Error ? err.message : "inconnue"}`, "error");
       }
@@ -202,64 +201,3 @@ export default function RegeneratePage() {
   );
 }
 
-/** Extract filmstrip frames from a video URL using canvas */
-function extractFrames(videoUrl: string): Promise<Blob[]> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.preload = "auto";
-    video.muted = true;
-    video.playsInline = true;
-    video.crossOrigin = "anonymous";
-
-    const blobs: Blob[] = [];
-    let index = 0;
-
-    video.onloadedmetadata = () => {
-      const duration = video.duration;
-      if (!duration || duration < 1) {
-        resolve([]);
-        return;
-      }
-      seekNext(duration);
-    };
-
-    function seekNext(duration: number) {
-      if (index >= FILMSTRIP_OFFSETS.length) {
-        resolve(blobs);
-        return;
-      }
-      video.currentTime = Math.max(0.1, duration * FILMSTRIP_OFFSETS[index]);
-    }
-
-    video.onseeked = async () => {
-      const srcW = video.videoWidth;
-      const srcH = video.videoHeight;
-      if (srcW && srcH) {
-        const canvas = document.createElement("canvas");
-        canvas.width = FILMSTRIP_W;
-        canvas.height = FILMSTRIP_H;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          try {
-            ctx.drawImage(video, 0, 0, FILMSTRIP_W, FILMSTRIP_H);
-            const blob = await new Promise<Blob | null>((res) =>
-              canvas.toBlob((b) => res(b), "image/jpeg", FILMSTRIP_QUALITY)
-            );
-            if (blob) blobs.push(blob);
-          } catch {
-            // Canvas tainted — skip
-          }
-        }
-      }
-      index++;
-      seekNext(video.duration);
-    };
-
-    video.onerror = () => resolve(blobs);
-
-    // Timeout after 30s per video
-    setTimeout(() => resolve(blobs), 30000);
-
-    video.src = videoUrl;
-  });
-}

@@ -19,6 +19,7 @@ export type Video = {
   original_filename: string | null;
   tags: string[];
   filmstrip_keys: string[];
+  palette_colors: string[];
   created_at: string;
 };
 

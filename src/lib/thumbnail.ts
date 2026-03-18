@@ -80,133 +80,196 @@ export function seekAndCapture(
 const FILMSTRIP_W = 80;
 const FILMSTRIP_H = 45;
 const FILMSTRIP_QUALITY = 0.5;
-const FILMSTRIP_OFFSETS = [0.1, 0.25, 0.5, 0.75, 0.9]; // % of duration
+const FILMSTRIP_OFFSETS = [0.1, 0.25, 0.5, 0.75, 0.9];
 
-/** Extract 5 filmstrip frames from a video File at fixed % offsets */
-export function extractFilmstripFrames(
-  file: File
-): Promise<Blob[]> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.preload = "auto";
-    video.muted = true;
-    video.playsInline = true;
+// Frame quality thresholds
+const MIN_BRIGHTNESS = 30;
+const MIN_VARIANCE = 15;
+const MAX_BW_RATIO = 0.7;
+const MAX_RETRIES = 3;
+const RETRY_OFFSET = 1.5;
+const DIVERSITY_THRESHOLD = 20;
+const DIVERSITY_OFFSET = 2;
 
-    const objectUrl = URL.createObjectURL(file);
-    const blobs: Blob[] = [];
-    let index = 0;
-
-    video.onloadedmetadata = () => {
-      const duration = video.duration;
-      if (!duration || duration < 1) {
-        URL.revokeObjectURL(objectUrl);
-        resolve([]);
-        return;
-      }
-      seekNext(duration);
+/** Seek a video element to a time and wait */
+function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const onSeeked = () => {
+      if (done) return;
+      done = true;
+      video.removeEventListener("seeked", onSeeked);
+      resolve();
     };
-
-    function seekNext(duration: number) {
-      if (index >= FILMSTRIP_OFFSETS.length) {
-        URL.revokeObjectURL(objectUrl);
-        resolve(blobs);
-        return;
-      }
-      const time = Math.max(0.1, duration * FILMSTRIP_OFFSETS[index]);
-      video.currentTime = time;
-    }
-
-    video.onseeked = async () => {
-      const srcW = video.videoWidth;
-      const srcH = video.videoHeight;
-      if (srcW && srcH) {
-        const canvas = document.createElement("canvas");
-        canvas.width = FILMSTRIP_W;
-        canvas.height = FILMSTRIP_H;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, FILMSTRIP_W, FILMSTRIP_H);
-          const blob = await new Promise<Blob | null>((res) =>
-            canvas.toBlob((b) => res(b), "image/jpeg", FILMSTRIP_QUALITY)
-          );
-          if (blob) blobs.push(blob);
-        }
-      }
-      index++;
-      seekNext(video.duration);
-    };
-
-    video.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(blobs);
-    };
-
-    video.src = objectUrl;
+    video.addEventListener("seeked", onSeeked);
+    video.currentTime = time;
+    setTimeout(() => {
+      if (!done) { done = true; video.removeEventListener("seeked", onSeeked); reject(new Error("seek timeout")); }
+    }, 5000);
   });
 }
 
-/** Extract filmstrip frames from a video URL (for regeneration of existing videos) */
-export function extractFilmstripFromUrl(
-  videoUrl: string
-): Promise<Blob[]> {
-  return new Promise((resolve) => {
+type FrameAnalysis = {
+  brightness: number;
+  variance: number;
+  bwRatio: number;
+  avgR: number;
+  avgG: number;
+  avgB: number;
+};
+
+/** Analyze pixels of a canvas for quality */
+function analyzeCanvas(ctx: CanvasRenderingContext2D, w: number, h: number): FrameAnalysis {
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const total = w * h;
+  let sumR = 0, sumG = 0, sumB = 0, bwCount = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    sumR += r; sumG += g; sumB += b;
+    const lum = (r + g + b) / 3;
+    if (lum < 10 || lum > 245) bwCount++;
+  }
+
+  const avgR = sumR / total, avgG = sumG / total, avgB = sumB / total;
+  const brightness = (avgR + avgG + avgB) / 3;
+
+  let varSum = 0;
+  for (let i = 0; i < data.length; i += 16) { // sample every 4th pixel for speed
+    varSum += (data[i] - avgR) ** 2 + (data[i + 1] - avgG) ** 2 + (data[i + 2] - avgB) ** 2;
+  }
+  const sampledCount = Math.ceil(data.length / 16);
+  const variance = Math.sqrt(varSum / (sampledCount * 3));
+
+  return { brightness, variance, bwRatio: bwCount / total, avgR, avgG, avgB };
+}
+
+function isFrameGood(a: FrameAnalysis): boolean {
+  return a.brightness >= MIN_BRIGHTNESS && a.variance >= MIN_VARIANCE && a.bwRatio < MAX_BW_RATIO;
+}
+
+function areTooSimilar(a: FrameAnalysis, b: FrameAnalysis): boolean {
+  const diff = (Math.abs(a.avgR - b.avgR) + Math.abs(a.avgG - b.avgG) + Math.abs(a.avgB - b.avgB)) / 3;
+  return diff < DIVERSITY_THRESHOLD;
+}
+
+/** Core extraction: capture a single good frame with retries and quality analysis */
+async function captureGoodFrame(
+  video: HTMLVideoElement,
+  baseTime: number,
+  duration: number,
+  prevAnalysis: FrameAnalysis | null,
+): Promise<{ blob: Blob; analysis: FrameAnalysis } | null> {
+  const canvas = document.createElement("canvas");
+  canvas.width = FILMSTRIP_W;
+  canvas.height = FILMSTRIP_H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  let time = baseTime;
+  let bestBlob: Blob | null = null;
+  let bestAnalysis: FrameAnalysis | null = null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const seekTime = Math.max(0.1, Math.min(time, duration - 0.1));
+    try {
+      await seekVideo(video, seekTime);
+      ctx.drawImage(video, 0, 0, FILMSTRIP_W, FILMSTRIP_H);
+    } catch {
+      time += RETRY_OFFSET;
+      continue;
+    }
+
+    const analysis = analyzeCanvas(ctx, FILMSTRIP_W, FILMSTRIP_H);
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob((b) => res(b), "image/jpeg", FILMSTRIP_QUALITY)
+    );
+    if (!blob) { time += RETRY_OFFSET; continue; }
+
+    // Keep best candidate
+    if (!bestBlob || (isFrameGood(analysis) && (!bestAnalysis || !isFrameGood(bestAnalysis)))) {
+      bestBlob = blob;
+      bestAnalysis = analysis;
+    }
+
+    if (isFrameGood(analysis)) {
+      // Check diversity against previous frame
+      if (prevAnalysis && areTooSimilar(analysis, prevAnalysis)) {
+        time += DIVERSITY_OFFSET;
+        continue;
+      }
+      return { blob, analysis };
+    }
+
+    time += RETRY_OFFSET;
+  }
+
+  // Return best we found even if not ideal
+  if (bestBlob && bestAnalysis) return { blob: bestBlob, analysis: bestAnalysis };
+  return null;
+}
+
+/** Load a video element from a source and wait for metadata */
+function loadVideo(src: string, crossOrigin?: string): Promise<HTMLVideoElement> {
+  return new Promise((resolve, reject) => {
     const video = document.createElement("video");
     video.preload = "auto";
     video.muted = true;
     video.playsInline = true;
-    video.crossOrigin = "use-credentials";
-
-    const blobs: Blob[] = [];
-    let index = 0;
-
-    video.onloadedmetadata = () => {
-      const duration = video.duration;
-      if (!duration || duration < 1) {
-        resolve([]);
-        return;
-      }
-      seekNext(duration);
-    };
-
-    function seekNext(duration: number) {
-      if (index >= FILMSTRIP_OFFSETS.length) {
-        resolve(blobs);
-        return;
-      }
-      const time = Math.max(0.1, duration * FILMSTRIP_OFFSETS[index]);
-      video.currentTime = time;
-    }
-
-    video.onseeked = async () => {
-      const srcW = video.videoWidth;
-      const srcH = video.videoHeight;
-      if (srcW && srcH) {
-        const canvas = document.createElement("canvas");
-        canvas.width = FILMSTRIP_W;
-        canvas.height = FILMSTRIP_H;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          try {
-            ctx.drawImage(video, 0, 0, FILMSTRIP_W, FILMSTRIP_H);
-            const blob = await new Promise<Blob | null>((res) =>
-              canvas.toBlob((b) => res(b), "image/jpeg", FILMSTRIP_QUALITY)
-            );
-            if (blob) blobs.push(blob);
-          } catch {
-            // Canvas tainted — skip this frame
-          }
-        }
-      }
-      index++;
-      seekNext(video.duration);
-    };
-
-    video.onerror = () => {
-      resolve(blobs);
-    };
-
-    video.src = videoUrl;
+    if (crossOrigin) video.crossOrigin = crossOrigin;
+    let resolved = false;
+    video.onloadedmetadata = () => { if (!resolved) { resolved = true; resolve(video); } };
+    video.onerror = () => { if (!resolved) { resolved = true; reject(new Error("video load error")); } };
+    video.src = src;
+    setTimeout(() => { if (!resolved) { resolved = true; reject(new Error("video load timeout")); } }, 15000);
   });
+}
+
+/** Shared smart extraction: extracts filmstrip frames with quality analysis */
+async function extractSmartFrames(
+  videoSrc: string,
+  crossOrigin?: string,
+  cleanup?: () => void,
+): Promise<Blob[]> {
+  let video: HTMLVideoElement;
+  try {
+    video = await loadVideo(videoSrc, crossOrigin);
+  } catch {
+    cleanup?.();
+    return [];
+  }
+
+  const duration = video.duration;
+  if (!duration || duration < 1) {
+    cleanup?.();
+    return [];
+  }
+
+  const blobs: Blob[] = [];
+  let prevAnalysis: FrameAnalysis | null = null;
+
+  for (const offset of FILMSTRIP_OFFSETS) {
+    const baseTime = Math.max(0.1, duration * offset);
+    const result = await captureGoodFrame(video, baseTime, duration, prevAnalysis);
+    if (result) {
+      blobs.push(result.blob);
+      prevAnalysis = result.analysis;
+    }
+  }
+
+  cleanup?.();
+  return blobs;
+}
+
+/** Extract filmstrip frames from a video File */
+export async function extractFilmstripFrames(file: File): Promise<Blob[]> {
+  const objectUrl = URL.createObjectURL(file);
+  return extractSmartFrames(objectUrl, undefined, () => URL.revokeObjectURL(objectUrl));
+}
+
+/** Extract filmstrip frames from a video URL (for regeneration) */
+export async function extractFilmstripFromUrl(videoUrl: string): Promise<Blob[]> {
+  return extractSmartFrames(videoUrl, "anonymous");
 }
 
 /** Upload filmstrip frames to R2, returns array of r2Keys */

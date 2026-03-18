@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ frames });
 }
 
-/** PATCH — update filmstrip_keys in DB after upload */
+/** PATCH — update filmstrip_keys and extract palette colors */
 export async function PATCH(request: NextRequest) {
   const supabase = await createServerClient();
   const {
@@ -97,20 +97,30 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Non autorise" }, { status: 401 });
   }
 
-  const { videoId, filmstripKeys } = await request.json();
+  const { videoId, filmstripKeys, paletteColors } = await request.json();
 
   if (!videoId || !Array.isArray(filmstripKeys)) {
     return NextResponse.json({ error: "videoId et filmstripKeys requis" }, { status: 400 });
   }
 
+  // If palette colors not provided, extract them server-side from the filmstrip frames
+  let colors: string[] = paletteColors;
+  if (!colors || colors.length === 0) {
+    const { extractPaletteFromR2Keys } = await import("@/lib/palette");
+    colors = await extractPaletteFromR2Keys(filmstripKeys);
+  }
+
   const { error } = await supabase
     .from("videos")
-    .update({ filmstrip_keys: filmstripKeys })
+    .update({
+      filmstrip_keys: filmstripKeys,
+      palette_colors: colors,
+    })
     .eq("id", videoId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, paletteColors: colors });
 }

@@ -270,10 +270,12 @@ export function VideoUpload({ talents, initialTalentId }: { talents: Talent[]; i
             uploadFilmstripFrames(filmstripBlobs, selectedTalent.slug, result.videoId)
               .then((keys) => {
                 if (keys.length > 0) {
-                  // Dynamic import to avoid circular deps
-                  import("@/app/(admin)/uploads/actions").then(({ updateFilmstripKeys }) => {
-                    updateFilmstripKeys(result.videoId!, keys);
-                  });
+                  // Save filmstrip keys + extract palette colors server-side
+                  fetch("/api/regenerate-filmstrips", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ videoId: result.videoId, filmstripKeys: keys }),
+                  }).catch(() => {});
                 }
               })
               .catch(() => {});

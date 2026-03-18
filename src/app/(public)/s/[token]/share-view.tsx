@@ -23,6 +23,7 @@ import {
 import type { Video } from "@/lib/types";
 import { useViewTracking } from "@/lib/use-view-tracking";
 import { Filmstrip } from "./filmstrip";
+import { ColorBand } from "./color-band";
 
 type ViewMode = "carousel" | "list";
 
@@ -164,6 +165,7 @@ export function ShareView({
   title,
   talentName,
   allowDownload,
+  headerStyle = "filmstrip",
 }: {
   videos: Video[];
   token: string;
@@ -171,10 +173,14 @@ export function ShareView({
   title: string | null;
   talentName: string | null;
   allowDownload: boolean;
+  headerStyle?: "filmstrip" | "colors";
 }) {
   const [mode, setMode] = useState<ViewMode>("carousel");
   const [sessionId] = useState(() => crypto.randomUUID());
   const tracking = useViewTracking({ shareLinkId, sessionId });
+
+  // Collect palette colors from all videos (pre-computed, no CORS needed)
+  const allPaletteColors = videos.flatMap((v) => v.palette_colors ?? []);
 
   // Collect filmstrip R2 keys per video, preserving grouping
   const perVideoKeys: string[][] = [];
@@ -266,10 +272,14 @@ export function ShareView({
             </div>
           </div>
 
-          {/* Filmstrip */}
+          {/* Filmstrip / Color band */}
           {allKeys.length > 0 && (
             <div className="mx-auto mt-4 max-w-5xl">
-              <Filmstrip videoFrames={perVideoUrls} />
+              {headerStyle === "colors" ? (
+                <ColorBand colors={allPaletteColors} />
+              ) : (
+                <Filmstrip videoFrames={perVideoUrls} />
+              )}
             </div>
           )}
         </header>
