@@ -180,7 +180,7 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
             <p className="text-[13px] text-neutral-400">Aucune video dans ce lien</p>
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext id="link-videos-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={videoIds} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-1.5">
                 {currentVideos.map((v) => <SortableVideoItem key={v.id} video={v} onRemove={() => setVideoIds((ids) => ids.filter((x) => x !== v.id))} />)}
