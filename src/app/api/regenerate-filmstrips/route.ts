@@ -65,7 +65,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Non autorise" }, { status: 401 });
   }
 
-  const { action } = await request.json();
+  const body = await request.json();
+  const { action, videoId, filmstripKeys } = body;
 
   // List videos needing palette extraction
   if (action === "list") {
@@ -93,7 +94,6 @@ export async function PUT(request: NextRequest) {
 
   // Extract palette for a single video
   if (action === "extract") {
-    const { videoId, filmstripKeys } = await request.json();
     if (!videoId || !Array.isArray(filmstripKeys) || filmstripKeys.length === 0) {
       return NextResponse.json({ error: "videoId et filmstripKeys requis" }, { status: 400 });
     }
