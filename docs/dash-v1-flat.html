@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sad Vault - V1 Flat List</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fff;color:#111;font-family:'DM Sans',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
+.container{max-width:680px;margin:0 auto;padding:3rem 1.5rem}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem}
+.header-left{display:flex;align-items:center;gap:8px}
+.header-left h1{font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#9ca3af}
+.header-left .count{font-size:11px;color:#d1d5db;font-weight:500}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;font-size:11px;font-weight:600;letter-spacing:0.03em;color:#111;background:#fff;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all 0.15s;font-family:inherit}
+.btn:hover{background:#f9fafb;border-color:#d1d5db}
+.divider{height:1px;background:#f3f4f6;margin-bottom:4px}
+.stats{display:flex;gap:0;padding:16px 0;margin-bottom:4px;border-bottom:1px solid #f3f4f6}
+.stat{flex:1;padding:0 20px;position:relative}
+.stat:first-child{padding-left:0}
+.stat:not(:first-child)::before{content:'';position:absolute;left:0;top:2px;bottom:2px;width:1px;background:#f3f4f6}
+.stat-label{font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#d1d5db;margin-bottom:4px}
+.stat-value{font-size:24px;font-weight:700;color:#111;letter-spacing:-0.03em}
+.stat-sub{font-size:10px;color:#d1d5db;margin-top:2px}
+.link-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px;transition:background 0.15s;cursor:pointer}
+.link-row:hover{background:#fafafa}
+.link-left{display:flex;flex-direction:column;gap:4px;min-width:0}
+.link-top{display:flex;align-items:center;gap:8px}
+.link-title{font-size:13px;font-weight:600;letter-spacing:0.03em;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.link-client{font-size:13px;font-weight:400;color:#9ca3af}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:500;border:1px solid}
+.badge-active{background:#f0fdf4;color:#15803d;border-color:#dcfce7}
+.badge-active .dot{background:#4ade80}
+.badge-expiring{background:#fffbeb;color:#a16207;border-color:#fef3c7}
+.badge-expiring .dot{background:#fbbf24}
+.badge-expired{background:#f9fafb;color:#9ca3af;border-color:#f3f4f6}
+.badge-expired .dot{background:#d1d5db}
+.dot{width:5px;height:5px;border-radius:50%}
+.link-meta{display:flex;align-items:center;gap:10px}
+.meta{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#9ca3af}
+.meta svg{opacity:0.5}
+.link-right{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:16px}
+.views{font-size:12px;color:#d1d5db;font-variant-numeric:tabular-nums;font-weight:500}
+.chevron{color:#d1d5db;transition:color 0.15s}
+.link-row:hover .chevron{color:#9ca3af}
+.section-label{font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#d1d5db;padding:20px 0 8px}
+.talent-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.talent-card{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:8px;border:1px solid #f3f4f6;transition:all 0.15s;cursor:pointer}
+.talent-card:hover{border-color:#e5e7eb;background:#fafafa}
+.talent-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+.ta-1{background:#eff6ff;color:#3b82f6}
+.ta-2{background:#faf5ff;color:#a855f7}
+.ta-3{background:#ecfdf5;color:#10b981}
+.ta-4{background:#fffbeb;color:#f59e0b}
+.talent-name{font-size:12px;font-weight:600;color:#111}
+.talent-info{font-size:10px;color:#d1d5db;margin-top:1px}
+.list-divider{height:1px;background:#f3f4f6;margin:0 16px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.animate{animation:fadeIn 0.4s ease both}
+.d1{animation-delay:0ms}.d2{animation-delay:40ms}.d3{animation-delay:80ms}.d4{animation-delay:120ms}.d5{animation-delay:160ms}.d6{animation-delay:200ms}.d7{animation-delay:240ms}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header animate d1">
+<div class="header-left">
+<h1>Sad Vault</h1>
+<span class="count">Dashboard</span>
+</div>
+<div style="display:flex;gap:6px">
+<button class="btn">Upload</button>
+<button class="btn" style="color:#111;font-weight:700">
+<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+Nouveau lien
+</button>
+</div>
+</div>
+
+<div class="stats animate d2">
+<div class="stat">
+<div class="stat-label">Talents</div>
+<div class="stat-value">4</div>
+</div>
+<div class="stat">
+<div class="stat-label">Vidéos</div>
+<div class="stat-value">23</div>
+<div class="stat-sub">1.8 Go</div>
+</div>
+<div class="stat">
+<div class="stat-label">Liens</div>
+<div class="stat-value">7</div>
+<div class="stat-sub">5 actifs</div>
+</div>
+<div class="stat">
+<div class="stat-label">Vues</div>
+<div class="stat-value">47</div>
+<div class="stat-sub">+12 aujourd'hui</div>
+</div>
+</div>
+
+<div class="section-label animate d3">Liens récents</div>
+<div class="divider"></div>
+
+<div class="animate d4">
+<div class="link-row">
+<div class="link-left">
+<div class="link-top">
+<span class="link-title">Juana 2026</span>
+<span class="link-client">Juana Wein</span>
+<span class="badge badge-active"><span class="dot"></span>Actif</span>
+</div>
+<div class="link-meta">
+<span class="meta">
+<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+3 vidéos
+</span>
+<span class="meta">
+<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+Créé il y a 2h
+</span>
+</div>
+</div>
+<div class="link-right">
+<span class="views">12 vues</span>
+<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+</div>
+</div>
+<div class="list-divider"></div>
+<div class="link-row">
+<div class="link-left">
+<div class="link-top">
+<span class="link-title">Carhartt WIP FW25</span>
+<span class="link-client">Naïa Combary</span>
+<span class="badge badge-active"><span class="dot"></span>Actif</span>
+</div>
+<div class="link-meta">
+<span class="meta">5 vidéos</span>
+</div>
+</div>
+<div class="link-right">
+<span class="views">8 vues</span>
+<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+</div>
+</div>
+<div class="list-divider"></div>
+<div class="link-row">
+<div class="link-left">
+<div class="link-top">
+<span class="link-title">Ino Live Session</span>
+<span class="link-client">Enzo Saintloup</span>
+<span class="badge badge-active"><span class="dot"></span>Actif</span>
+</div>
+<div class="link-meta">
+<span class="meta">1 vidéo</span>
+</div>
+</div>
+<div class="link-right">
+<span class="views">24 vues</span>
+<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+</div>
+</div>
+<div class="list-divider"></div>
+<div class="link-row">
+<div class="link-left">
+<div class="link-top">
+<span class="link-title">Avène Solaire 2026</span>
+<span class="link-client">Juana Wein</span>
+<span class="badge badge-expiring"><span class="dot"></span>Expire 3j</span>
+</div>
+<div class="link-meta">
+<span class="meta">2 vidéos</span>
+</div>
+</div>
+<div class="link-right">
+<span class="views">3 vues</span>
+<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+</div>
+</div>
+</div>
+
+<div class="section-label animate d5">Talents</div>
+<div class="talent-grid animate d6">
+<div class="talent-card">
+<div class="talent-avatar ta-1">JW</div>
+<div><div class="talent-name">Juana Wein</div><div class="talent-info">12 vidéos · 4 liens</div></div>
+</div>
+<div class="talent-card">
+<div class="talent-avatar ta-2">NC</div>
+<div><div class="talent-name">Naïa Combary</div><div class="talent-info">8 vidéos · 2 liens</div></div>
+</div>
+<div class="talent-card">
+<div class="talent-avatar ta-3">ES</div>
+<div><div class="talent-name">Enzo Saintloup</div><div class="talent-info">3 vidéos · 1 lien</div></div>
+</div>
+<div class="talent-card">
+<div class="talent-avatar ta-4">RW</div>
+<div><div class="talent-name">Robin Watine</div><div class="talent-info">0 vidéos · 0 liens</div></div>
+</div>
+</div>
+</div>
+</body>
+</html>

@@ -1,5 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { r2, R2_BUCKET } from "@/lib/r2";
 import { createServiceClient } from "@/lib/supabase-service";
 import type { Video, ShareLink, Talent } from "@/lib/types";
 import { ShareView } from "./share-view";
@@ -56,11 +59,33 @@ export async function generateMetadata({
     : `${videoCount} video${videoCount !== 1 ? "s" : ""}`;
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://reel.sad-pictures.com";
-  // Use custom_slug for OG if available, otherwise token
-  const ogParam = link.custom_slug || link.token;
-  const ogImageUrl = `${baseUrl}/api/og/${ogParam}`;
 
-  return {
+  // Get a presigned R2 URL for the first video's thumbnail (lightweight JPEG, no ImageResponse)
+  let ogImageUrl: string | undefined;
+  if (link.video_ids?.length > 0) {
+    const { data: videos } = await supabase
+      .from("videos")
+      .select("id, thumbnail_key")
+      .in("id", link.video_ids);
+    if (videos) {
+      const videoMap = new Map<string, string | null>();
+      for (const v of videos as { id: string; thumbnail_key: string | null }[]) {
+        videoMap.set(v.id, v.thumbnail_key);
+      }
+      for (const id of link.video_ids) {
+        const thumbKey = videoMap.get(id);
+        if (thumbKey) {
+          try {
+            const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: thumbKey });
+            ogImageUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
+          } catch { /* ignore */ }
+          if (ogImageUrl) break;
+        }
+      }
+    }
+  }
+
+  const metadata: Metadata = {
     title,
     description,
     metadataBase: new URL(baseUrl),
@@ -69,26 +94,23 @@ export async function generateMetadata({
       description,
       type: "video.other",
       siteName: "Sad Pictures",
-      images: [
-        {
-          url: ogImageUrl,
-          width: 900,
-          height: 470,
-          alt: title,
-        },
-      ],
+      ...(ogImageUrl && {
+        images: [{ url: ogImageUrl, alt: title }],
+      }),
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [ogImageUrl],
+      ...(ogImageUrl && { images: [ogImageUrl] }),
     },
     robots: {
       index: true,
       follow: true,
     },
   };
+
+  return metadata;
 }
 
 export default async function SharePage({
