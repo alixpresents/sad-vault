@@ -15,7 +15,8 @@ import { updateShareLink } from "../../actions";
 import { SlugField } from "../../slug-field";
 
 const EXPIRATION_OPTIONS = [
-  { label: "Pas d'expiration", value: "none" },
+  { label: "Ne pas modifier", value: "none" },
+  { label: "Retirer l'expiration", value: "remove" },
   { label: "24 heures", value: "24h" },
   { label: "7 jours", value: "7d" },
   { label: "30 jours", value: "30d" },
@@ -154,7 +155,8 @@ export function EditLinkForm({ link, allVideos, talents }: { link: ShareLink; al
   async function handleSubmit() {
     if (videoIds.length === 0) { setError("Le lien doit contenir au moins une video."); return; }
     setError(null); setSubmitting(true);
-    const result = await updateShareLink(link.id, { title: title || null, custom_slug: customSlug || null, video_ids: videoIds, expires_at: getExpirationDate(expiration), allow_download: allowDownload, filmstrip_style: filmstripStyle });
+    const newExpiration = expiration === "none" ? link.expires_at : expiration === "remove" ? null : getExpirationDate(expiration);
+    const result = await updateShareLink(link.id, { title: title || null, custom_slug: customSlug || null, video_ids: videoIds, expires_at: newExpiration, allow_download: allowDownload, filmstrip_style: filmstripStyle });
     if (result?.error) { setError(result.error); setSubmitting(false); }
   }
 
