@@ -320,31 +320,39 @@ function DownloadButton({ url, r2Key, title }: { url?: string | null; r2Key: str
   const token = useToken();
   const [loading, setLoading] = useState(false);
 
-  async function handleClick(e: React.MouseEvent) {
-    // If we already have a URL, let the <a> default behaviour work
-    if (url) return;
+  const filename = `${title.replace(/[^a-zA-Z0-9_\- ]/g, "").trim() || "video"}.mp4`;
 
+  async function handleClick(e: React.MouseEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
-    const fetched = await fetchShareUrl(token, r2Key);
-    setLoading(false);
-    if (fetched) {
-      // Trigger download programmatically
+
+    try {
+      // Get presigned URL if not already available
+      const videoUrl = url || await fetchShareUrl(token, r2Key);
+      if (!videoUrl) return;
+
+      // Fetch as blob to force real download (cross-origin <a download> doesn't work)
+      const res = await fetch(videoUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = fetched;
-      a.download = title;
-      document.body.appendChild(a);
+      a.href = blobUrl;
+      a.download = filename;
       a.click();
-      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <a
-      href={url || "#"}
-      download={title}
+    <button
       onClick={handleClick}
-      className="inline-flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/[0.12] hover:text-white/90"
+      disabled={loading}
+      className="inline-flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/[0.12] hover:text-white/90 disabled:opacity-50"
     >
       {loading ? (
         <Loader2 className="size-3.5 animate-spin" />
@@ -352,7 +360,7 @@ function DownloadButton({ url, r2Key, title }: { url?: string | null; r2Key: str
         <Download className="size-3.5" />
       )}
       Telecharger
-    </a>
+    </button>
   );
 }
 
