@@ -183,6 +183,52 @@ export async function toggleShareLinkActive(id: string) {
   revalidatePath(`/links/${id}/edit`);
 }
 
+export async function duplicateShareLink(id: string) {
+  const { supabase, user } = await requireAuth();
+
+  if (!z.string().uuid().safeParse(id).success) {
+    return { error: "ID invalide" };
+  }
+
+  const { data: original } = await supabase
+    .from("share_links")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (!original) return { error: "Lien introuvable" };
+
+  // Compute relative expiration: same duration from now
+  let expiresAt: string | null = null;
+  if (original.expires_at) {
+    const created = new Date(original.created_at).getTime();
+    const expires = new Date(original.expires_at).getTime();
+    const durationMs = expires - created;
+    expiresAt = new Date(Date.now() + durationMs).toISOString();
+  }
+
+  const token = generateToken();
+  const title = original.title ? `${original.title} (copie)` : "(copie)";
+
+  const { error } = await supabase.from("share_links").insert({
+    token,
+    custom_slug: null,
+    title,
+    talent_id: original.talent_id,
+    video_ids: original.video_ids,
+    expires_at: expiresAt,
+    allow_download: original.allow_download,
+    filmstrip_style: original.filmstrip_style ?? "thumbnails",
+    is_active: true,
+    created_by: user.id,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/links");
+  return { success: true };
+}
+
 /** Check if a custom_slug is available (for real-time validation) */
 export async function checkSlugAvailability(
   slug: string,

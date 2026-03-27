@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, Check, Trash2, ExternalLink, Pencil } from "lucide-react";
+import { Copy, CopyPlus, Check, Trash2, ExternalLink, Pencil, Loader2 } from "lucide-react";
 import type { ShareLink } from "@/lib/types";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { deleteShareLink, toggleShareLinkActive } from "./actions";
+import { deleteShareLink, duplicateShareLink, toggleShareLinkActive } from "./actions";
 
 function getLinkStatus(link: ShareLink) {
   if (!link.is_active) return "inactive" as const;
@@ -41,6 +41,7 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
   const [deleting, setDeleting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -54,6 +55,12 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
     navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  async function handleDuplicate(id: string) {
+    setDuplicatingId(id);
+    await duplicateShareLink(id);
+    setDuplicatingId(null);
   }
 
   async function handleToggle(id: string) {
@@ -141,6 +148,14 @@ export function LinksTable({ links, talentMap }: { links: ShareLink[]; talentMap
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDuplicate(link.id); }}
+                    disabled={duplicatingId === link.id}
+                    className="relative z-10 rounded-md border border-neutral-200 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-50 hover:text-neutral-600 disabled:opacity-50"
+                    title="Dupliquer"
+                  >
+                    {duplicatingId === link.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CopyPlus className="h-3.5 w-3.5" />}
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setDeleteId(link.id); }}
                     className="relative z-10 ml-auto rounded-md p-1.5 text-neutral-300 transition-colors hover:bg-red-50 hover:text-red-500"
