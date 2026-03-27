@@ -316,14 +316,41 @@ export function ShareView({
 
 // ─── Carousel mode ───────────────────────────────────────────────
 
-function DownloadButton({ url, title }: { url: string; title: string }) {
+function DownloadButton({ url, r2Key, title }: { url?: string | null; r2Key: string; title: string }) {
+  const token = useToken();
+  const [loading, setLoading] = useState(false);
+
+  async function handleClick(e: React.MouseEvent) {
+    // If we already have a URL, let the <a> default behaviour work
+    if (url) return;
+
+    e.preventDefault();
+    setLoading(true);
+    const fetched = await fetchShareUrl(token, r2Key);
+    setLoading(false);
+    if (fetched) {
+      // Trigger download programmatically
+      const a = document.createElement("a");
+      a.href = fetched;
+      a.download = title;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  }
+
   return (
     <a
-      href={url}
+      href={url || "#"}
       download={title}
+      onClick={handleClick}
       className="inline-flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/[0.12] hover:text-white/90"
     >
-      <Download className="size-3.5" />
+      {loading ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : (
+        <Download className="size-3.5" />
+      )}
       Telecharger
     </a>
   );
@@ -526,8 +553,8 @@ function CarouselView({
             <p className="mt-0.5 text-xs text-white/30">{talentName}</p>
           )}
         </div>
-        {allowDownload && video.url && (
-          <DownloadButton url={video.url} title={activeVideo.title} />
+        {allowDownload && (
+          <DownloadButton url={video.url} r2Key={activeVideo.r2_key} title={activeVideo.title} />
         )}
       </div>
     </div>
@@ -712,9 +739,9 @@ const ListItem = memo(function ListItem({
       </div>
 
       {/* Download button */}
-      {allowDownload && videoUrl && (
+      {allowDownload && (
         <div className="mt-2 flex justify-end">
-          <DownloadButton url={videoUrl} title={video.title} />
+          <DownloadButton url={videoUrl} r2Key={video.r2_key} title={video.title} />
         </div>
       )}
     </div>
